@@ -1,0 +1,398 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ─── fleet-review ─────────────────────────────────────────────────────
+# Multi-AI code review for any GitHub PR.
+# Fans out to Claude, Codex, Qwen, and Copilot in parallel,
+# posts individual reviews as PR comments, then synthesizes
+# a merged report ranked by consensus.
+#
+# Usage:
+#   fleet-review <PR_NUMBER|PR_URL> [flags]
+#   fleet-review 42
+#   fleet-review 42 --only claude,codex
+#   fleet-review 42 --skip-merge
+#   fleet-review https://github.com/owner/repo/pull/42
+#
+# Flags:
+#   --only <list>     Comma-separated auditors (default: claude,codex,qwen,copilot)
+#   --skip-merge      Run audits only, don't synthesize
+#   --merge-only      Skip audits, just synthesize existing comments
+#   --prompt <file>   Custom audit prompt file (default: built-in)
+#   --repo <owner/repo>  Override repo detection
+# ──────────────────────────────────────────────────────────────────────
+
+VERSION="1.0.0"
+TMPDIR_BASE=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_BASE"' EXIT
+
+# ─── Defaults ─────────────────────────────────────────────────────────
+
+# Auto-detect environment for default auditors:
+#   VS Code terminal → claude,qwen (Copilot + Codex already auto-review via GitHub Apps)
+#   Plain terminal   → claude,codex,qwen (Copilot auto-reviews, but Codex doesn't without VS Code)
+if [ "${TERM_PROGRAM:-}" = "vscode" ] || [ -n "${VSCODE_PID:-}" ]; then
+  AUDITORS=(claude qwen)
+  DETECTED_ENV="vscode"
+else
+  AUDITORS=(claude codex qwen)
+  DETECTED_ENV="terminal"
+fi
+SKIP_MERGE=false
+MERGE_ONLY=false
+CUSTOM_PROMPT=""
+REPO=""
+PR=""
+
+# ─── Parse args ───────────────────────────────────────────────────────
+
+usage() {
+  cat <<'USAGE'
+fleet-review — Multi-AI code review for GitHub PRs
+
+Usage:
+  fleet-review <PR_NUMBER|PR_URL> [flags]
+
+Flags:
+  --only <list>         Comma-separated auditors (overrides auto-detection)
+  --skip-merge          Run audits only, don't synthesize
+  --merge-only          Skip audits, just synthesize existing audit comments
+  --prompt <file>       Custom audit prompt template file
+  --repo <owner/repo>   Override repo detection (default: inferred from git remote)
+  --version             Print version
+  -h, --help            Show this help
+
+Environment auto-detection:
+  VS Code terminal  → claude,qwen      (Copilot + Codex auto-review via GitHub)
+  Plain terminal    → claude,codex,qwen (Copilot auto-reviews via GitHub)
+  Use --only to override.
+
+Examples:
+  fleet-review 42
+  fleet-review 42 --only claude,codex,qwen,copilot
+  fleet-review https://github.com/owner/repo/pull/42 --skip-merge
+  fleet-review 42 --merge-only
+USAGE
+  exit 0
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage ;;
+    --version) echo "fleet-review $VERSION"; exit 0 ;;
+    --only) IFS=',' read -ra AUDITORS <<< "$2"; shift 2 ;;
+    --skip-merge) SKIP_MERGE=true; shift ;;
+    --merge-only) MERGE_ONLY=true; shift ;;
+    --prompt) CUSTOM_PROMPT="$2"; shift 2 ;;
+    --repo) REPO="$2"; shift 2 ;;
+    -*)
+      echo "ERROR: Unknown flag '$1'" >&2
+      echo "Run 'fleet-review --help' for usage." >&2
+      exit 1
+      ;;
+    *)
+      if [ -z "$PR" ]; then
+        PR="$1"
+      else
+        echo "ERROR: Unexpected argument '$1'" >&2
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$PR" ]; then
+  echo "ERROR: PR number or URL required." >&2
+  echo "Run 'fleet-review --help' for usage." >&2
+  exit 1
+fi
+
+# ─── Resolve PR and repo ─────────────────────────────────────────────
+
+# Handle full GitHub URL: extract repo and PR number
+if [[ "$PR" =~ github\.com/([^/]+/[^/]+)/pull/([0-9]+) ]]; then
+  REPO="${REPO:-${BASH_REMATCH[1]}}"
+  PR="${BASH_REMATCH[2]}"
+fi
+
+# Auto-detect repo from git remote if not specified
+if [ -z "$REPO" ]; then
+  REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null || true)
+  if [ -z "$REPO" ]; then
+    echo "ERROR: Could not detect repo. Use --repo owner/repo or pass a full PR URL." >&2
+    exit 1
+  fi
+fi
+
+echo "fleet-review v$VERSION"
+echo "  PR:   $REPO#$PR"
+echo "  Env:  $DETECTED_ENV"
+echo "  Team: ${AUDITORS[*]}"
+echo ""
+
+# ─── Detect project context ──────────────────────────────────────────
+
+detect_project_context() {
+  local context="a software project"
+  if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+    if grep -q "android" build.gradle* 2>/dev/null; then
+      context="an Android app (Kotlin/Java, Gradle)"
+    else
+      context="a JVM project (Kotlin/Java, Gradle)"
+    fi
+  elif [ -f "package.json" ]; then
+    context="a Node.js/TypeScript project"
+  elif [ -f "Cargo.toml" ]; then
+    context="a Rust project"
+  elif [ -f "go.mod" ]; then
+    context="a Go project"
+  elif [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+    context="a Python project"
+  elif [ -f "Gemfile" ]; then
+    context="a Ruby project"
+  fi
+  echo "$context"
+}
+
+PROJECT_CONTEXT=$(detect_project_context)
+
+# ─── Build audit prompt ──────────────────────────────────────────────
+
+build_audit_prompt() {
+  if [ -n "$CUSTOM_PROMPT" ]; then
+    cat "$CUSTOM_PROMPT"
+    return
+  fi
+
+  cat <<'PROMPT'
+Review the diff below for:
+
+1. **Bugs** — logic errors, off-by-ones, race conditions, null safety issues
+2. **Security** — injection, unsafe operations, data leaks, exposed secrets
+3. **Performance** — unnecessary allocations, hot-path inefficiencies, algorithmic complexity
+4. **Design** — coupling, naming, missing abstractions, framework best practices
+5. **Tests** — untested paths, edge cases that should be covered
+
+For each finding, report using this exact format:
+
+### [CATEGORY] Severity: <critical|high|medium|low>
+
+**File:** `path/to/file` L<line>
+**Issue:** One-line summary
+**Details:** Explanation of the problem
+**Suggested fix:**
+```
+// code suggestion if applicable
+```
+
+---
+
+At the end, provide a summary table:
+
+| # | Category | Severity | File | Issue |
+|---|----------|----------|------|-------|
+| 1 | Bug | High | Foo.kt:42 | Description |
+
+If you find no issues in a category, say "No issues found" for that category.
+
+Be precise. Cite line numbers from the diff. Do not flag style preferences — only flag things that are wrong, risky, or meaningfully improvable.
+PROMPT
+}
+
+# ─── Fetch PR data ───────────────────────────────────────────────────
+
+echo "==> Fetching PR #$PR..."
+DIFF=$(gh pr diff "$PR" --repo "$REPO")
+if [ -z "$DIFF" ]; then
+  echo "ERROR: Empty diff for PR #$PR" >&2
+  exit 1
+fi
+
+PR_TITLE=$(gh pr view "$PR" --repo "$REPO" --json title -q '.title')
+PR_BODY=$(gh pr view "$PR" --repo "$REPO" --json body -q '.body')
+
+AUDIT_PROMPT=$(build_audit_prompt)
+
+# Build full prompt safely with printf
+PROMPT_FILE_TMP="$TMPDIR_BASE/prompt.md"
+{
+  printf 'You are auditing a pull request for %s.\n\n' "$PROJECT_CONTEXT"
+  printf '%s\n' "$AUDIT_PROMPT"
+  printf '\n## PR Context\n'
+  printf '**Title:** %s\n' "$PR_TITLE"
+  printf '**Description:** %s\n' "$PR_BODY"
+  printf '\n## Diff\n```diff\n'
+  printf '%s\n' "$DIFF"
+  printf '```\n'
+} > "$PROMPT_FILE_TMP"
+
+FULL_PROMPT=$(cat "$PROMPT_FILE_TMP")
+
+# ─── Auditor runners ─────────────────────────────────────────────────
+
+run_claude() {
+  echo "  [claude] Starting..."
+  echo "$FULL_PROMPT" | claude -p --output-format text \
+    > "$TMPDIR_BASE/claude.md" 2>/dev/null
+  echo "  [claude] Done."
+}
+
+run_codex() {
+  echo "  [codex] Starting..."
+  echo "$FULL_PROMPT" | codex exec --dangerously-bypass-approvals-and-sandbox - \
+    > "$TMPDIR_BASE/codex.md" 2>/dev/null
+  echo "  [codex] Done."
+}
+
+run_qwen() {
+  echo "  [qwen] Starting..."
+  echo "$FULL_PROMPT" | qwen -p "Audit this PR" --output-format text \
+    > "$TMPDIR_BASE/qwen.md" 2>/dev/null
+  echo "  [qwen] Done."
+}
+
+run_copilot() {
+  echo "  [copilot] Starting..."
+  echo "$FULL_PROMPT" | copilot -p "Audit this PR" \
+    > "$TMPDIR_BASE/copilot.md" 2>/dev/null
+  echo "  [copilot] Done."
+}
+
+# ─── Run audits ──────────────────────────────────────────────────────
+
+run_audits() {
+  echo "==> Running audits in parallel: ${AUDITORS[*]}"
+  PIDS=()
+  STARTED=()
+  for auditor in "${AUDITORS[@]}"; do
+    case "$auditor" in
+      claude)  run_claude  & PIDS+=($!); STARTED+=("claude") ;;
+      codex)   run_codex   & PIDS+=($!); STARTED+=("codex") ;;
+      qwen)    run_qwen    & PIDS+=($!); STARTED+=("qwen") ;;
+      copilot) run_copilot & PIDS+=($!); STARTED+=("copilot") ;;
+      *) echo "  WARNING: Unknown auditor '$auditor', skipping." ;;
+    esac
+  done
+
+  FAILED=()
+  for i in "${!PIDS[@]}"; do
+    if ! wait "${PIDS[$i]}"; then
+      FAILED+=("${STARTED[$i]}")
+    fi
+  done
+
+  if [ ${#FAILED[@]} -gt 0 ]; then
+    echo "  WARNING: Failed: ${FAILED[*]}"
+  fi
+
+  echo "==> Posting audit comments..."
+  for auditor in "${STARTED[@]}"; do
+    RESULT_FILE="$TMPDIR_BASE/$auditor.md"
+    if [ ! -s "$RESULT_FILE" ]; then
+      echo "  [$auditor] No output, skipping."
+      continue
+    fi
+
+    COMMENT_FILE="$TMPDIR_BASE/${auditor}_comment.md"
+    {
+      printf '## Audit by `%s`\n\n' "$auditor"
+      cat "$RESULT_FILE"
+      printf '\n\n---\n_Automated audit via `fleet-review`_\n'
+    } > "$COMMENT_FILE"
+
+    gh pr comment "$PR" --repo "$REPO" --body-file "$COMMENT_FILE"
+    echo "  [$auditor] Posted."
+  done
+}
+
+# ─── Merge / synthesize ──────────────────────────────────────────────
+
+run_merge() {
+  echo "==> Fetching audit comments for synthesis..."
+
+  COMMENTS=$(gh pr view "$PR" --repo "$REPO" --json comments -q '
+    .comments[]
+    | select(.body | test("Audit by `"))
+    | "---\n" + .body
+  ')
+
+  if [ -z "$COMMENTS" ]; then
+    echo "ERROR: No audit comments found on PR #$PR." >&2
+    echo "Run 'fleet-review $PR' first (without --merge-only)." >&2
+    exit 1
+  fi
+
+  MERGE_PROMPT_FILE="$TMPDIR_BASE/merge_prompt.md"
+  cat > "$MERGE_PROMPT_FILE" <<'STATIC_EOF'
+You are consolidating code audit results from independent AI reviewers for a single PR.
+
+## Your task
+
+1. **Deduplicate**: Multiple AIs may flag the same issue — merge them into one entry and note which AIs agreed.
+2. **Rank by consensus**: Issues flagged by 3+ AIs → top priority. 2 AIs → high. 1 AI → evaluate on merit.
+3. **Filter noise**: Drop pure style nits or false positives. If only one AI flagged something and it looks wrong, drop it with a note.
+4. **Produce a final report** with:
+   - A prioritized action list (what to fix, in order)
+   - A "dismissed" section (what was flagged but isn't worth fixing, with rationale)
+   - A consensus summary table
+
+## Format
+
+### Action Items (ordered by priority)
+
+#### 1. [Title] — Severity: <critical|high|medium|low>
+**Consensus:** Flagged by: Claude, Codex, Qwen (3/4)
+**File:** `path/to/file` L<line>
+**Issue:** Description
+**Recommended fix:** What to do (code optional)
+
+---
+
+### Dismissed Findings
+
+| Finding | Flagged by | Reason for dismissal |
+|---------|-----------|---------------------|
+
+### Consensus Summary
+
+| # | Issue | Claude | Codex | Qwen | Copilot | Severity |
+|---|-------|--------|-------|------|---------|----------|
+
+STATIC_EOF
+
+  {
+    printf '\n## Audit comments from reviewers\n\n'
+    printf '%s\n' "$COMMENTS"
+    printf '\n## PR Diff (for reference)\n\n```diff\n'
+    printf '%s\n' "$DIFF"
+    printf '```\n'
+  } >> "$MERGE_PROMPT_FILE"
+
+  echo "==> Synthesizing with Claude..."
+  claude -p --output-format text < "$MERGE_PROMPT_FILE" \
+    > "$TMPDIR_BASE/merged.md"
+
+  {
+    printf '## Merged Audit Report\n\n'
+    cat "$TMPDIR_BASE/merged.md"
+    printf '\n\n---\n_Consolidated from independent audits via `fleet-review`_\n'
+  } > "$TMPDIR_BASE/final_comment.md"
+
+  gh pr comment "$PR" --repo "$REPO" --body-file "$TMPDIR_BASE/final_comment.md"
+  echo "==> Merged report posted."
+}
+
+# ─── Main ─────────────────────────────────────────────────────────────
+
+if [ "$MERGE_ONLY" = true ]; then
+  run_merge
+elif [ "$SKIP_MERGE" = true ]; then
+  run_audits
+else
+  run_audits
+  run_merge
+fi
+
+echo ""
+echo "Done! See results: https://github.com/$REPO/pull/$PR"
