@@ -1,112 +1,92 @@
-# fleet-review
+# Fleet Review
 
-Multi-AI code review for GitHub PRs. Fans out your PR to multiple AI reviewers in parallel, posts individual audits as PR comments, then synthesizes a merged report ranked by consensus.
+VS Code extension that dispatches GitHub PR reviews to multiple AI CLIs in parallel, posts individual audits as PR comments, then synthesizes a merged report ranked by consensus.
 
-## How it works
-
+```text
+PR Diff ──┬──> Claude   ──┐
+          ├──> Gemini   ──┤
+          ├──> Codex    ──┼──> Merged Report (deduplicated, ranked by consensus)
+          ├──> Qwen     ──┤
+          └──> Copilot  ──┘
 ```
-PR Diff ──┬──► Claude  ──┐
-          ├──► Codex   ──┤
-          ├──► Qwen    ──┼──► Merged Report (deduplicated, ranked by consensus)
-          └──► Copilot ──┘
-```
 
-Each AI independently reviews the diff and posts findings as a PR comment. Then Claude synthesizes all findings into a single prioritized report — deduplicating issues, ranking by how many AIs agree, and filtering noise.
+Each AI independently reviews the diff and posts findings as a PR comment. Comments post as each model finishes — no waiting for stragglers. Then Claude synthesizes all findings into a single prioritized report.
 
 ## Prerequisites
 
-- [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated
+- [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated via `gh auth login`
 - At least one AI CLI installed:
-  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
-  - [Codex CLI](https://github.com/openai/codex) (`codex`)
-  - [Qwen CLI](https://github.com/QwenLM/qwen-code) (`qwen`)
-  - [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli) (`copilot`)
+
+| CLI | Install | Notes |
+| ----- | ------- | ----- |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Used for merge synthesis |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Defaults to Auto model (Gemini 3) |
+| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | Needs `--dangerously-bypass-approvals-and-sandbox` |
+| [Qwen CLI](https://github.com/QwenLM/qwen-code) | `npm i -g @qwen-code/qwen-code` | |
+| [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli) | `npm i -g @githubnext/ghcs` | |
 
 ## Install
 
 ```bash
 git clone https://github.com/DarkoKuzmanovic/fleet-review.git
 cd fleet-review
-make install
+npm install
+npm run compile
 ```
 
-This installs to `~/.local/bin/`. For system-wide install:
-
-```bash
-sudo make install PREFIX=/usr/local
-```
-
-To uninstall:
-
-```bash
-make uninstall
-```
+Then press **F5** in VS Code to launch the Extension Development Host.
 
 ## Usage
 
-```bash
-# Review a PR (auto-detects repo from git remote)
-fleet-review 42
+1. Open a project with a GitHub remote in VS Code
+2. Click the **Fleet Review** icon in the Activity Bar (sidebar)
+3. Select a PR and choose which models to run
+4. Click **Start Review** — models dispatch in parallel
+5. Results post to GitHub as each model finishes
 
-# Review by full URL
-fleet-review https://github.com/owner/repo/pull/123
+### Commands
 
-# Pick specific auditors
-fleet-review 42 --only claude,codex
+| Command | Description |
+| ------- | ----------- |
+| `Fleet Review: Start Code Review` | Opens sidebar and starts review flow |
+| `Fleet Review: Grade Models` | Opens full-page grading panel with sliders |
+| `Fleet Review: Grade with Claude Code` | Writes review data for Claude Code to grade |
+| `Fleet Review: Show Leaderboard` | Opens full-page leaderboard with sparklines |
 
-# Run audits only (no merge step)
-fleet-review 42 --skip-merge
+## Configuration
 
-# Re-synthesize existing audit comments
-fleet-review 42 --merge-only
+| Setting | Default | Description |
+| ------- | ------- | ----------- |
+| `fleetReview.defaultModels` | `["claude", "gemini", "qwen"]` | Models to select by default |
+| `fleetReview.geminiModel` | `auto` | Gemini model (`auto`, `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-*-preview`) |
+| `fleetReview.timeoutSeconds` | `300` | Timeout per model (seconds) |
+| `fleetReview.dataDir` | `~/.config/fleet-review` | Directory for review data and scores |
 
-# Use a custom audit prompt
-fleet-review 42 --prompt my-prompt.md
+## How scoring works
 
-# Specify repo explicitly
-fleet-review 42 --repo owner/repo
-```
+After a review, you can grade each model's output (1-10 scale) via the **Grade** tab or by asking Claude Code to grade automatically. Scores accumulate in a leaderboard with sparkline trends, helping you decide which models to keep in your review fleet.
 
-## Environment auto-detection
+### Data files
 
-`fleet-review` detects whether you're running from VS Code or a plain terminal and adjusts which AI CLIs it calls:
+Stored in `~/.config/fleet-review/` (configurable):
 
-| Environment | Auditors | Why |
-|---|---|---|
-| VS Code terminal | claude, qwen | Copilot + Codex already auto-review via GitHub Apps |
-| Plain terminal | claude, codex, qwen | Copilot auto-reviews via GitHub, but Codex doesn't |
+| File | Purpose |
+| ---- | ------- |
+| `reviews.json` | Review records with model outputs |
+| `scores.json` | Grading entries (model, score, feedback, graded-by) |
+| `last-review.json` | Written by extension for Claude Code to read |
+| `pending-scores.json` | Written by Claude Code, auto-imported by extension |
 
-Use `--only` to override auto-detection.
+## Architecture
 
-## What gets posted to your PR
+- **No APIs** — all AI calls go through locally installed CLIs via `child_process.spawn()`
+- **Sidebar-first UI** — main workflow lives in the Activity Bar
+- **JSON file storage** — no database, no server
+- **Parallel dispatch** via `Promise.allSettled()` with per-model timeout + extend/kill controls
 
-1. One comment per auditor: `## Audit by claude`, `## Audit by codex`, etc.
-2. A final `## Merged Audit Report` with:
-   - **Action items** ranked by consensus (3/4 AIs agree = top priority)
-   - **Dismissed findings** with rationale
-   - **Consensus summary table**
+## Shell script
 
-## Custom audit prompts
-
-Create a markdown file with your review criteria and pass it with `--prompt`:
-
-```bash
-fleet-review 42 --prompt security-audit.md
-```
-
-The prompt receives the PR title, description, and full diff appended automatically.
-
-## Project type detection
-
-The tool auto-detects your project type and includes it in the prompt context:
-
-- Android (Kotlin/Java, Gradle)
-- JVM (Kotlin/Java, Gradle)
-- Node.js/TypeScript
-- Rust
-- Go
-- Python
-- Ruby
+The `shell/` directory contains the original standalone bash script (`fleet-review`) that predates this extension. It works independently and can be installed via `make install` in that directory.
 
 ## License
 

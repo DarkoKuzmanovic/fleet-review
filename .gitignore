@@ -1,4 +1,10 @@
+node_modules/
+dist/
+*.vsix
+
 .DS_Store
 *.swp
 *.swo
 *~
+
+.claude/docs/

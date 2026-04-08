@@ -1,0 +1,42 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as os from 'os';
+
+import { ModelName, MODEL_NAMES } from './types';
+
+export class Config {
+  static get defaultModels(): ModelName[] {
+    const raw = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<string[]>('defaultModels', ['claude', 'gemini', 'qwen']);
+    return raw.filter((m): m is ModelName =>
+      MODEL_NAMES.includes(m as ModelName)
+    );
+  }
+
+  static get dataDir(): string {
+    const raw = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<string>('dataDir', '~/.config/fleet-review');
+    return raw.startsWith('~')
+      ? path.join(os.homedir(), raw.slice(1))
+      : raw;
+  }
+
+  static get timeoutMs(): number {
+    const seconds = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<number>('timeoutSeconds', 300);
+    return seconds * 1000;
+  }
+
+  static get geminiModel(): string {
+    return vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<string>('geminiModel', 'auto');
+  }
+
+  static get workspaceRoot(): string | undefined {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+}
