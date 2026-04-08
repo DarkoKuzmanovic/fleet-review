@@ -1,4 +1,4 @@
-export const MODEL_NAMES = ['claude', 'codex', 'gemini', 'qwen', 'copilot'] as const;
+export const MODEL_NAMES = ['claude', 'codex', 'gemini', 'qwen', 'copilot', 'glm'] as const;
 export type ModelName = (typeof MODEL_NAMES)[number];
 
 export type ModelStatus = 'pending' | 'running' | 'done' | 'failed' | 'timeout' | 'timeout-pending';

@@ -22,6 +22,11 @@ export class CliDispatcher {
     onTimeout?: () => Promise<TimeoutDecision>
   ): Promise<CliResult> {
     this.log(`Dispatching ${model}`);
+
+    if (model === 'glm') {
+      return this.httpDispatch(prompt, onBytes, signal);
+    }
+
     const promptFile = this.writeTempPrompt(model, prompt);
     try {
       switch (model) {
@@ -42,6 +47,66 @@ export class CliDispatcher {
       }
     } finally {
       this.deleteTempPrompt(promptFile);
+    }
+  }
+
+  private async httpDispatch(
+    prompt: string,
+    onBytes?: (bytes: number) => void,
+    signal?: AbortSignal
+  ): Promise<CliResult> {
+    const apiKey = Config.nanoGptApiKey;
+    if (!apiKey) {
+      return { stdout: '', stderr: 'Nano-GPT API key not configured. Set fleetReview.nanoGptApiKey or NANO_GPT_API_KEY env var.', exitCode: 1 };
+    }
+
+    const timeoutController = new AbortController();
+    const timeout = setTimeout(() => timeoutController.abort(), Config.timeoutMs);
+
+    // Abort if either the timeout or the caller's signal fires
+    const onCallerAbort = () => timeoutController.abort();
+    signal?.addEventListener('abort', onCallerAbort, { once: true });
+
+    try {
+      this.log('GLM: POST https://nano-gpt.com/api/v1/chat/completions');
+      const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'zai-org/glm-5:thinking',
+          messages: [{ role: 'user', content: prompt }],
+        }),
+        signal: timeoutController.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        this.log(`GLM: HTTP ${response.status} — ${errorBody.substring(0, 200)}`);
+        return { stdout: '', stderr: `Nano-GPT API error ${response.status}: ${errorBody}`, exitCode: 1 };
+      }
+
+      const data = await response.json() as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = data.choices?.[0]?.message?.content ?? '';
+      this.log(`GLM: received ${content.length} chars`);
+      if (onBytes) onBytes(Buffer.byteLength(content, 'utf-8'));
+
+      return { stdout: content, stderr: '', exitCode: content.length > 0 ? 0 : 1 };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('abort')) {
+        this.log('GLM: request aborted');
+        throw new Error(signal?.aborted ? 'Review cancelled' : `glm timed out after ${Config.timeoutMs / 1000}s`);
+      }
+      this.log(`GLM: error — ${message}`);
+      return { stdout: '', stderr: message, exitCode: 1 };
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onCallerAbort);
     }
   }
 

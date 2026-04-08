@@ -68,7 +68,8 @@
               "codex",
               "gemini",
               "qwen",
-              "copilot"
+              "copilot",
+              "glm"
             ]
           },
           "default": [
@@ -94,6 +95,11 @@
           ],
           "default": "auto",
           "description": "Gemini model for code review. 'auto' lets Gemini CLI pick the best model (Gemini 3)."
+        },
+        "fleetReview.nanoGptApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Nano-GPT API key for GLM model reviews. Get one at nano-gpt.com. Falls back to NANO_GPT_API_KEY env var."
         },
         "fleetReview.timeoutSeconds": {
           "type": "number",

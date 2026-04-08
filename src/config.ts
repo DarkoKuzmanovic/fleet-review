@@ -36,6 +36,13 @@ export class Config {
       .get<string>('geminiModel', 'auto');
   }
 
+  static get nanoGptApiKey(): string {
+    const key = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<string>('nanoGptApiKey', '');
+    return key || process.env.NANO_GPT_API_KEY || '';
+  }
+
   static get workspaceRoot(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
