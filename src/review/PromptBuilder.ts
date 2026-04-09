@@ -29,8 +29,16 @@ export class PromptBuilder {
   ): string {
     const contextLine =
       projectType !== 'unknown'
-        ? `This is a **${projectType}** project.\n\n`
+        ? `This is a **${projectType}** project.${PROJECT_HINTS[projectType] ? ' ' + PROJECT_HINTS[projectType] : ''}\n\n`
         : '';
+
+    const diffLines = diff.split('\n').length;
+    const fileCount = pr.files.length;
+    const sizeLine = `_~${diffLines} diff lines across ${fileCount} file${fileCount !== 1 ? 's' : ''}${diffLines > 300 ? ' — focus on high-impact issues' : ''}_\n\n`;
+
+    const fileList = pr.files.length > 0
+      ? `### Files Changed\n\n${pr.files.map(f => '- `' + f + '`').join('\n')}\n\n`
+      : '';
 
     return `${contextLine}${AUDIT_INSTRUCTIONS}
 
@@ -39,8 +47,11 @@ export class PromptBuilder {
 **Title:** ${pr.title}
 **Branch:** ${pr.headRefName}
 **Author:** ${pr.author}
+${sizeLine}
+${pr.body ? `### Description\n\n${pr.body}\n\n` : ''}${fileList}### Diff
 
-${pr.body ? `### Description\n\n${pr.body}\n\n` : ''}### Diff
+Lines prefixed with \`+\` are additions, \`-\` are removals. Focus your review on additions and modified logic.
+Skip lock files, generated code, and vendored dependencies.
 
 \`\`\`diff
 ${diff}
@@ -71,6 +82,16 @@ ${diff}
 `;
   }
 }
+
+const PROJECT_HINTS: Partial<Record<ProjectType, string>> = {
+  node: 'Watch for unhandled promise rejections, prototype pollution, missing input validation, and dependency-related issues.',
+  android: 'Watch for memory leaks (context/activity references), missing null checks, main-thread blocking, and permission misuse.',
+  jvm: 'Watch for resource leaks, unchecked casts, thread-safety issues, and exception swallowing.',
+  rust: 'Watch for unsafe blocks, lifetime issues, unwrap() on fallible paths, and missing error propagation.',
+  go: 'Watch for unchecked errors, goroutine leaks, nil pointer dereferences, and improper mutex usage.',
+  python: 'Watch for mutable default arguments, bare except clauses, missing type hints on public APIs, and injection via string formatting.',
+  ruby: 'Watch for mass assignment, N+1 queries, unsafe metaprogramming, and missing strong parameters.',
+};
 
 const AUDIT_INSTRUCTIONS = `You are a senior code reviewer performing an independent audit of a GitHub pull request.
 

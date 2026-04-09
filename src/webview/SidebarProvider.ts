@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-import { ExtensionMessage, ModelName, MODEL_NAMES, TimeoutDecision, WebviewMessage } from "../types";
+import { ExtensionMessage, API_MODELS, ModelName, MODEL_NAMES, TimeoutDecision, WebviewMessage } from "../types";
 import { Config } from "../config";
 import { GitHubClient } from "../github/GitHubClient";
 import { CliDispatcher } from "../review/CliDispatcher";
@@ -183,12 +183,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const modelsJson = JSON.stringify([...MODEL_NAMES]);
     const defaultsJson = JSON.stringify(Config.defaultModels);
     const timeoutSec = Config.timeoutMs / 1000;
+    const modelTimeoutsJson = JSON.stringify(Config.modelTimeouts);
+    const apiModelsJson = JSON.stringify([...API_MODELS]);
+    const webview = this.view!.webview;
+    const cliIconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'media', 'cli.svg')
+    );
+    const apiIconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'media', 'api.svg')
+    );
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src \${webview.cspSource};">
 <style>
   :root {
     --bg: var(--vscode-sideBar-background);
@@ -375,6 +384,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   .sparkline svg { display: block; }
 
+  /* ─── Model type glyph ─── */
+  .model-glyph {
+    width: 14px; height: 14px; vertical-align: middle; opacity: 0.7;
+    margin-right: 2px; flex-shrink: 0;
+  }
+
   /* ─── Empty states ─── */
   .empty-state { color: var(--desc-fg); padding: 24px 0; text-align: center; font-size: 13px; }
 </style>
@@ -453,6 +468,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   const ALL_MODELS = ${modelsJson};
   const DEFAULT_MODELS = ${defaultsJson};
   const TIMEOUT_SEC = ${timeoutSec};
+  const MODEL_TIMEOUTS = ${modelTimeoutsJson};
+  const API_MODELS = new Set(${apiModelsJson});
+  const CLI_ICON = '${cliIconUri}';
+  const API_ICON = '${apiIconUri}';
 
   let prs = [];
   let currentReview = null;
@@ -523,10 +542,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     vscode.postMessage({ type: 'requestPRs' });
   }
 
+  function modelGlyphHtml(m) {
+    var isApi = API_MODELS.has(m);
+    var src = isApi ? API_ICON : CLI_ICON;
+    var title = isApi ? 'API' : 'CLI';
+    return '<img class="model-glyph" src="' + src + '" alt="' + title + '" title="' + title + '"> ';
+  }
+
   function buildModelCheckboxes() {
     document.getElementById('model-checkboxes').innerHTML = ALL_MODELS.map(m =>
       '<label><input type="checkbox" value="' + m + '"' +
-      (DEFAULT_MODELS.includes(m) ? ' checked' : '') + '> ' + m + '</label>'
+      (DEFAULT_MODELS.includes(m) ? ' checked' : '') + '> ' + modelGlyphHtml(m) + m + '</label>'
     ).join('');
   }
 
@@ -552,7 +578,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     showState('progress');
     document.getElementById('progress-models').innerHTML = models.map(m =>
       '<div class="model-row" id="progress-' + m + '">' +
-      '<span class="name">' + m + '</span>' +
+      '<span class="name">' + modelGlyphHtml(m) + m + '</span>' +
       '<span class="elapsed"></span>' +
       '<span class="badge pending">pending</span></div>'
     ).join('');
@@ -631,7 +657,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       actions.className = 'timeout-actions';
       var extBtn = document.createElement('button');
       extBtn.className = 'extend-btn';
-      extBtn.textContent = 'Extend ' + TIMEOUT_SEC + 's';
+      var modelTimeout = MODEL_TIMEOUTS[model] || TIMEOUT_SEC;
+      extBtn.textContent = 'Extend ' + modelTimeout + 's';
       extBtn.onclick = function() { vscode.postMessage({ type: 'extendTimeout', model: model }); };
       var killBtn = document.createElement('button');
       killBtn.className = 'kill-btn';
@@ -681,7 +708,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     document.getElementById('results-detail').innerHTML = models.map(m => {
       const r = review.results[m];
       return '<details class="result-block"' + (r.success ? ' open' : '') + '>' +
-        '<summary>' + m + (r.success ? ' ✓' : ' ✗') + ' — ' + (r.durationMs / 1000).toFixed(1) + 's</summary>' +
+        '<summary>' + modelGlyphHtml(m) + m + (r.success ? ' ✓' : ' ✗') + ' — ' + (r.durationMs / 1000).toFixed(1) + 's</summary>' +
         (r.success
           ? '<pre>' + escapeHtml(r.output) + '</pre>'
           : '<p class="error">' + escapeHtml(r.error || 'Error') + '</p>') +
