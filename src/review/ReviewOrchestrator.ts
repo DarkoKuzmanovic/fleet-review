@@ -10,6 +10,7 @@ import {
   ReviewRecord,
   TimeoutDecision,
 } from '../types';
+import { Config } from '../config';
 import { CliDispatcher } from './CliDispatcher';
 import { PromptBuilder } from './PromptBuilder';
 import { GitHubClient } from '../github/GitHubClient';
@@ -65,7 +66,8 @@ export class ReviewOrchestrator {
             }
             return decision;
           } : undefined;
-          const result = await this.dispatcher.dispatch(model, prompt, onBytes ? (bytes) => onBytes(model, bytes) : undefined, signal, onModelTimeout);
+          const modelTimeoutMs = Config.timeoutMsForModel(model);
+          const result = await this.dispatcher.dispatch(model, prompt, onBytes ? (bytes) => onBytes(model, bytes) : undefined, signal, onModelTimeout, modelTimeoutMs);
           const durationMs = Date.now() - startTime;
 
           const success = result.exitCode === 0 && result.stdout.trim().length > 0;

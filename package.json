@@ -2,9 +2,14 @@
   "name": "fleet-review",
   "displayName": "Fleet Review",
   "description": "Multi-AI code review for GitHub PRs with model scoring",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "icon": "media/icon.png",
   "publisher": "darko-kuzmanovic",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DarkoKuzmanovic/fleet-review.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -104,7 +109,20 @@
         "fleetReview.timeoutSeconds": {
           "type": "number",
           "default": 300,
-          "description": "Timeout in seconds for each model's review"
+          "description": "Default timeout in seconds for each model's review. Can be overridden per model via modelTimeouts."
+        },
+        "fleetReview.modelTimeouts": {
+          "type": "object",
+          "properties": {
+            "claude": { "type": "number", "description": "Timeout in seconds for Claude" },
+            "codex": { "type": "number", "description": "Timeout in seconds for Codex" },
+            "gemini": { "type": "number", "description": "Timeout in seconds for Gemini" },
+            "qwen": { "type": "number", "description": "Timeout in seconds for Qwen" },
+            "copilot": { "type": "number", "description": "Timeout in seconds for Copilot" },
+            "glm": { "type": "number", "description": "Timeout in seconds for GLM" }
+          },
+          "default": {},
+          "description": "Per-model timeout overrides in seconds. Models not listed here use the default timeoutSeconds."
         }
       }
     }

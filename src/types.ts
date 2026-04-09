@@ -1,6 +1,8 @@
 export const MODEL_NAMES = ['claude', 'codex', 'gemini', 'qwen', 'copilot', 'glm'] as const;
 export type ModelName = (typeof MODEL_NAMES)[number];
 
+export const API_MODELS: ReadonlySet<ModelName> = new Set(['glm']);
+
 export type ModelStatus = 'pending' | 'running' | 'done' | 'failed' | 'timeout' | 'timeout-pending';
 
 export type TimeoutDecision = 'extend' | 'kill';

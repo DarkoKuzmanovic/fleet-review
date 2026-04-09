@@ -23,11 +23,33 @@ export class Config {
       : raw;
   }
 
-  static get timeoutMs(): number {
-    const seconds = vscode.workspace
+  static get defaultTimeoutSeconds(): number {
+    return vscode.workspace
       .getConfiguration('fleetReview')
       .get<number>('timeoutSeconds', 300);
+  }
+
+  static get timeoutMs(): number {
+    return Config.defaultTimeoutSeconds * 1000;
+  }
+
+  static timeoutMsForModel(model: ModelName): number {
+    const overrides = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<Record<string, number>>('modelTimeouts', {});
+    const seconds = overrides[model] ?? Config.defaultTimeoutSeconds;
     return seconds * 1000;
+  }
+
+  static get modelTimeouts(): Record<string, number> {
+    const overrides = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<Record<string, number>>('modelTimeouts', {});
+    const result: Record<string, number> = {};
+    for (const m of MODEL_NAMES) {
+      result[m] = overrides[m] ?? Config.defaultTimeoutSeconds;
+    }
+    return result;
   }
 
   static get geminiModel(): string {

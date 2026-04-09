@@ -20,31 +20,32 @@ export class CliDispatcher {
     prompt: string,
     onBytes?: (bytes: number) => void,
     signal?: AbortSignal,
-    onTimeout?: () => Promise<TimeoutDecision>
+    onTimeout?: () => Promise<TimeoutDecision>,
+    timeoutMs?: number
   ): Promise<CliResult> {
     this.log(`Dispatching ${model}`);
 
     if (model === 'glm') {
-      return this.httpDispatch(prompt, onBytes, signal);
+      return this.httpDispatch(prompt, onBytes, signal, timeoutMs);
     }
 
     const promptFile = await this.writeTempPrompt(model, prompt);
     try {
       switch (model) {
         case 'claude':
-          return await this.spawnWithStdin('claude', ['-p', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout);
+          return await this.spawnWithStdin('claude', ['-p', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout, timeoutMs);
         case 'codex':
-          return await this.spawnWithStdin('codex', ['exec', '--dangerously-bypass-approvals-and-sandbox', '-'], promptFile, onBytes, signal, onTimeout);
+          return await this.spawnWithStdin('codex', ['exec', '--dangerously-bypass-approvals-and-sandbox', '-'], promptFile, onBytes, signal, onTimeout, timeoutMs);
         case 'gemini':
           const geminiArgs = ['-e', '', '-p', 'Review the provided code', '--output-format', 'text'];
           if (Config.geminiModel !== 'auto') {
             geminiArgs.unshift('--model', Config.geminiModel);
           }
-          return await this.spawnWithStdin('gemini', geminiArgs, promptFile, onBytes, signal, onTimeout);
+          return await this.spawnWithStdin('gemini', geminiArgs, promptFile, onBytes, signal, onTimeout, timeoutMs);
         case 'qwen':
-          return await this.spawnWithStdin('qwen', ['-p', '', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout);
+          return await this.spawnWithStdin('qwen', ['-p', '', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout, timeoutMs);
         case 'copilot':
-          return await this.spawnWithStdin('copilot', ['-p', '', '-s', '--model', 'gpt-5.3-codex', '--effort', 'high', '--allow-all-tools'], promptFile, onBytes, signal, onTimeout);
+          return await this.spawnWithStdin('copilot', ['-p', '', '-s', '--model', 'gpt-5.3-codex', '--effort', 'high', '--allow-all-tools'], promptFile, onBytes, signal, onTimeout, timeoutMs);
         default:
           throw new Error(`Unknown model: ${model}`);
       }
@@ -56,15 +57,17 @@ export class CliDispatcher {
   private async httpDispatch(
     prompt: string,
     onBytes?: (bytes: number) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    timeoutMs?: number
   ): Promise<CliResult> {
     const apiKey = Config.nanoGptApiKey;
     if (!apiKey) {
       return { stdout: '', stderr: 'Nano-GPT API key not configured. Set fleetReview.nanoGptApiKey or NANO_GPT_API_KEY env var.', exitCode: 1 };
     }
 
+    const effectiveTimeout = timeoutMs ?? Config.timeoutMs;
     const timeoutController = new AbortController();
-    const timeout = setTimeout(() => timeoutController.abort(), Config.timeoutMs);
+    const timeout = setTimeout(() => timeoutController.abort(), effectiveTimeout);
 
     // Abort if either the timeout or the caller's signal fires
     const onCallerAbort = () => timeoutController.abort();
@@ -103,7 +106,7 @@ export class CliDispatcher {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('abort')) {
         this.log('GLM: request aborted');
-        throw new Error(signal?.aborted ? 'Review cancelled' : `glm timed out after ${Config.timeoutMs / 1000}s`);
+        throw new Error(signal?.aborted ? 'Review cancelled' : `glm timed out after ${effectiveTimeout / 1000}s`);
       }
       this.log(`GLM: error — ${message}`);
       return { stdout: '', stderr: message, exitCode: 1 };
@@ -138,9 +141,10 @@ export class CliDispatcher {
     promptFile: string,
     onBytes?: (bytes: number) => void,
     signal?: AbortSignal,
-    onTimeout?: () => Promise<TimeoutDecision>
+    onTimeout?: () => Promise<TimeoutDecision>,
+    overrideTimeoutMs?: number
   ): Promise<CliResult> {
-    const timeoutMs = Config.timeoutMs;
+    const timeoutMs = overrideTimeoutMs ?? Config.timeoutMs;
 
     return new Promise((resolve, reject) => {
       if (signal?.aborted) {
