@@ -5,6 +5,20 @@ All notable changes to the Fleet Review extension will be documented in this fil
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-04-09
+
+### Added
+- Extension icon assets from `media/icon.svg` with packaged marketplace icon at `media/icon.png`
+
+### Changed
+- Review prompts now cap the file list to 50 entries and summarize the remainder for large PRs
+
+### Fixed
+- Webview CSP now interpolates `webview.cspSource` correctly so model glyph icons render
+- Glyph image URIs in webview script are JSON-escaped before injection
+- Glyph HTML rendering now escapes image URI attributes defensively
+- Timeout extension button now uses nullish fallback (`??`) to match backend timeout resolution
+
 ## [0.1.1] - 2026-04-09
 
 ### Fixed

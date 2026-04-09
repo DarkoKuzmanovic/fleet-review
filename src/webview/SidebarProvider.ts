@@ -39,9 +39,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this.extensionUri],
     };
 
-    webviewView.webview.onDidReceiveMessage((msg: WebviewMessage) =>
-      this.handleMessage(msg)
-    );
+    webviewView.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg));
 
     webviewView.webview.html = this.getHtml();
     this.output.appendLine(`[${new Date().toISOString()}] webview HTML set`);
@@ -111,15 +109,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
       const projectType = Config.workspaceRoot ? this.promptBuilder.detectProjectType(Config.workspaceRoot) : "unknown";
 
-      const review = await this.orchestrator.runReview(this.repo, pr, diff, models, projectType, (model, status) => {
-        this.post({ type: "reviewProgress", model, status });
-      }, (model, bytes) => {
-        this.post({ type: "reviewBytes", model, bytes });
-      }, (model) => {
-        return new Promise<TimeoutDecision>((resolve) => {
-          this.pendingTimeouts.set(model, resolve);
-        });
-      });
+      const review = await this.orchestrator.runReview(
+        this.repo,
+        pr,
+        diff,
+        models,
+        projectType,
+        (model, status) => {
+          this.post({ type: "reviewProgress", model, status });
+        },
+        (model, bytes) => {
+          this.post({ type: "reviewBytes", model, bytes });
+        },
+        (model) => {
+          return new Promise<TimeoutDecision>((resolve) => {
+            this.pendingTimeouts.set(model, resolve);
+          });
+        },
+      );
 
       this.post({ type: "reviewComplete", review });
 
@@ -134,7 +141,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       });
     } finally {
       for (const resolve of this.pendingTimeouts.values()) {
-        resolve('kill');
+        resolve("kill");
       }
       this.pendingTimeouts.clear();
     }
@@ -186,18 +193,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const modelTimeoutsJson = JSON.stringify(Config.modelTimeouts);
     const apiModelsJson = JSON.stringify([...API_MODELS]);
     const webview = this.view!.webview;
-    const cliIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'media', 'cli.svg')
-    );
-    const apiIconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'media', 'api.svg')
-    );
+    const cliIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "cli.svg"));
+    const apiIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "api.svg"));
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src \${webview.cspSource};">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src ${webview.cspSource};">
 <style>
   :root {
     --bg: var(--vscode-sideBar-background);
@@ -470,8 +473,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   const TIMEOUT_SEC = ${timeoutSec};
   const MODEL_TIMEOUTS = ${modelTimeoutsJson};
   const API_MODELS = new Set(${apiModelsJson});
-  const CLI_ICON = '${cliIconUri}';
-  const API_ICON = '${apiIconUri}';
+  const CLI_ICON = ${JSON.stringify(cliIconUri.toString())};
+  const API_ICON = ${JSON.stringify(apiIconUri.toString())};
 
   let prs = [];
   let currentReview = null;
@@ -546,7 +549,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     var isApi = API_MODELS.has(m);
     var src = isApi ? API_ICON : CLI_ICON;
     var title = isApi ? 'API' : 'CLI';
-    return '<img class="model-glyph" src="' + src + '" alt="' + title + '" title="' + title + '"> ';
+    return '<img class="model-glyph" src="' + escapeHtml(src) + '" alt="' + title + '" title="' + title + '"> ';
   }
 
   function buildModelCheckboxes() {
@@ -657,7 +660,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       actions.className = 'timeout-actions';
       var extBtn = document.createElement('button');
       extBtn.className = 'extend-btn';
-      var modelTimeout = MODEL_TIMEOUTS[model] || TIMEOUT_SEC;
+      var modelTimeout = (MODEL_TIMEOUTS[model] ?? TIMEOUT_SEC);
       extBtn.textContent = 'Extend ' + modelTimeout + 's';
       extBtn.onclick = function() { vscode.postMessage({ type: 'extendTimeout', model: model }); };
       var killBtn = document.createElement('button');

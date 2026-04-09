@@ -1,44 +1,40 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "fs";
+import * as path from "path";
 
-import { PRDetail, ProjectType } from '../types';
+import { PRDetail, ProjectType } from "../types";
 
 export class PromptBuilder {
   detectProjectType(workspaceRoot: string): ProjectType {
-    const exists = (f: string) =>
-      fs.existsSync(path.join(workspaceRoot, f));
+    const exists = (f: string) => fs.existsSync(path.join(workspaceRoot, f));
 
-    if (exists('build.gradle') || exists('build.gradle.kts')) {
-      const hasAndroid =
-        exists('AndroidManifest.xml') ||
-        exists('app/src/main/AndroidManifest.xml');
-      return hasAndroid ? 'android' : 'jvm';
+    if (exists("build.gradle") || exists("build.gradle.kts")) {
+      const hasAndroid = exists("AndroidManifest.xml") || exists("app/src/main/AndroidManifest.xml");
+      return hasAndroid ? "android" : "jvm";
     }
-    if (exists('package.json')) return 'node';
-    if (exists('Cargo.toml')) return 'rust';
-    if (exists('go.mod')) return 'go';
-    if (exists('pyproject.toml') || exists('setup.py')) return 'python';
-    if (exists('Gemfile')) return 'ruby';
-    return 'unknown';
+    if (exists("package.json")) return "node";
+    if (exists("Cargo.toml")) return "rust";
+    if (exists("go.mod")) return "go";
+    if (exists("pyproject.toml") || exists("setup.py")) return "python";
+    if (exists("Gemfile")) return "ruby";
+    return "unknown";
   }
 
-  buildAuditPrompt(
-    pr: PRDetail,
-    diff: string,
-    projectType: ProjectType
-  ): string {
+  buildAuditPrompt(pr: PRDetail, diff: string, projectType: ProjectType): string {
     const contextLine =
-      projectType !== 'unknown'
-        ? `This is a **${projectType}** project.${PROJECT_HINTS[projectType] ? ' ' + PROJECT_HINTS[projectType] : ''}\n\n`
-        : '';
+      projectType !== "unknown"
+        ? `This is a **${projectType}** project.${PROJECT_HINTS[projectType] ? " " + PROJECT_HINTS[projectType] : ""}\n\n`
+        : "";
 
-    const diffLines = diff.split('\n').length;
+    const diffLines = diff.split("\n").length;
     const fileCount = pr.files.length;
-    const sizeLine = `_~${diffLines} diff lines across ${fileCount} file${fileCount !== 1 ? 's' : ''}${diffLines > 300 ? ' — focus on high-impact issues' : ''}_\n\n`;
+    const sizeLine = `_~${diffLines} diff lines across ${fileCount} file${fileCount !== 1 ? "s" : ""}${diffLines > 300 ? " — focus on high-impact issues" : ""}_\n\n`;
 
-    const fileList = pr.files.length > 0
-      ? `### Files Changed\n\n${pr.files.map(f => '- `' + f + '`').join('\n')}\n\n`
-      : '';
+    const maxFiles = 50;
+    const displayFiles = pr.files.slice(0, maxFiles);
+    const fileList =
+      pr.files.length > 0
+        ? `### Files Changed\n\n${displayFiles.map((f) => "- `" + f + "`").join("\n")}${pr.files.length > maxFiles ? `\n\n_...and ${pr.files.length - maxFiles} more_` : ""}\n\n`
+        : "";
 
     return `${contextLine}${AUDIT_INSTRUCTIONS}
 
@@ -48,7 +44,7 @@ export class PromptBuilder {
 **Branch:** ${pr.headRefName}
 **Author:** ${pr.author}
 ${sizeLine}
-${pr.body ? `### Description\n\n${pr.body}\n\n` : ''}${fileList}### Diff
+${pr.body ? `### Description\n\n${pr.body}\n\n` : ""}${fileList}### Diff
 
 Lines prefixed with \`+\` are additions, \`-\` are removals. Focus your review on additions and modified logic.
 Skip lock files, generated code, and vendored dependencies.
@@ -59,11 +55,8 @@ ${diff}
 `;
   }
 
-  buildMergePrompt(
-    auditOutputs: Record<string, string>,
-    diff: string
-  ): string {
-    let audits = '';
+  buildMergePrompt(auditOutputs: Record<string, string>, diff: string): string {
+    let audits = "";
     for (const [model, output] of Object.entries(auditOutputs)) {
       audits += `---\n## Audit by \`${model}\`\n\n${output}\n\n`;
     }
@@ -84,13 +77,15 @@ ${diff}
 }
 
 const PROJECT_HINTS: Partial<Record<ProjectType, string>> = {
-  node: 'Watch for unhandled promise rejections, prototype pollution, missing input validation, and dependency-related issues.',
-  android: 'Watch for memory leaks (context/activity references), missing null checks, main-thread blocking, and permission misuse.',
-  jvm: 'Watch for resource leaks, unchecked casts, thread-safety issues, and exception swallowing.',
-  rust: 'Watch for unsafe blocks, lifetime issues, unwrap() on fallible paths, and missing error propagation.',
-  go: 'Watch for unchecked errors, goroutine leaks, nil pointer dereferences, and improper mutex usage.',
-  python: 'Watch for mutable default arguments, bare except clauses, missing type hints on public APIs, and injection via string formatting.',
-  ruby: 'Watch for mass assignment, N+1 queries, unsafe metaprogramming, and missing strong parameters.',
+  node: "Watch for unhandled promise rejections, prototype pollution, missing input validation, and dependency-related issues.",
+  android:
+    "Watch for memory leaks (context/activity references), missing null checks, main-thread blocking, and permission misuse.",
+  jvm: "Watch for resource leaks, unchecked casts, thread-safety issues, and exception swallowing.",
+  rust: "Watch for unsafe blocks, lifetime issues, unwrap() on fallible paths, and missing error propagation.",
+  go: "Watch for unchecked errors, goroutine leaks, nil pointer dereferences, and improper mutex usage.",
+  python:
+    "Watch for mutable default arguments, bare except clauses, missing type hints on public APIs, and injection via string formatting.",
+  ruby: "Watch for mass assignment, N+1 queries, unsafe metaprogramming, and missing strong parameters.",
 };
 
 const AUDIT_INSTRUCTIONS = `You are a senior code reviewer performing an independent audit of a GitHub pull request.

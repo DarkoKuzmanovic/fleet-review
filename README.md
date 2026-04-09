@@ -59,7 +59,9 @@ Then press **F5** in VS Code to launch the Extension Development Host.
 | ------- | ------- | ----------- |
 | `fleetReview.defaultModels` | `["claude", "gemini", "qwen"]` | Models to select by default |
 | `fleetReview.geminiModel` | `auto` | Gemini model (`auto`, `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-*-preview`) |
+| `fleetReview.nanoGptApiKey` | `""` | Nano-GPT API key used by GLM reviews (falls back to `NANO_GPT_API_KEY`) |
 | `fleetReview.timeoutSeconds` | `300` | Timeout per model (seconds) |
+| `fleetReview.modelTimeouts` | `{}` | Per-model timeout overrides (seconds) for `claude`, `codex`, `gemini`, `qwen`, `copilot`, and `glm` |
 | `fleetReview.dataDir` | `~/.config/fleet-review` | Directory for review data and scores |
 
 ## How scoring works
