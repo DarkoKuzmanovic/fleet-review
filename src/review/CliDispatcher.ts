@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -27,7 +28,7 @@ export class CliDispatcher {
       return this.httpDispatch(prompt, onBytes, signal);
     }
 
-    const promptFile = this.writeTempPrompt(model, prompt);
+    const promptFile = await this.writeTempPrompt(model, prompt);
     try {
       switch (model) {
         case 'claude':
@@ -44,9 +45,11 @@ export class CliDispatcher {
           return await this.spawnWithStdin('qwen', ['-p', '', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout);
         case 'copilot':
           return await this.spawnWithStdin('copilot', ['-p', '', '-s', '--model', 'gpt-5.3-codex', '--effort', 'high', '--allow-all-tools'], promptFile, onBytes, signal, onTimeout);
+        default:
+          throw new Error(`Unknown model: ${model}`);
       }
     } finally {
-      this.deleteTempPrompt(promptFile);
+      await this.deleteTempPrompt(promptFile);
     }
   }
 
@@ -244,18 +247,18 @@ export class CliDispatcher {
     });
   }
 
-  private writeTempPrompt(model: string, prompt: string): string {
+  private async writeTempPrompt(model: string, prompt: string): Promise<string> {
     const filePath = path.join(
       os.tmpdir(),
-      `fleet-review-${model}-${Date.now()}.md`
+      `fleet-review-${model}-${randomUUID()}.md`
     );
-    fs.writeFileSync(filePath, prompt, 'utf-8');
+    await fs.promises.writeFile(filePath, prompt, 'utf-8');
     return filePath;
   }
 
-  private deleteTempPrompt(filePath: string): void {
+  private async deleteTempPrompt(filePath: string): Promise<void> {
     try {
-      fs.unlinkSync(filePath);
+      await fs.promises.unlink(filePath);
     } catch {
       // ignore cleanup errors
     }

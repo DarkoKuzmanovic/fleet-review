@@ -7,11 +7,13 @@ import { CliDispatcher } from "../review/CliDispatcher";
 import { PromptBuilder } from "../review/PromptBuilder";
 import { ReviewOrchestrator } from "../review/ReviewOrchestrator";
 import { ScoreStore } from "../scoring/ScoreStore";
+import { ESCAPE_HTML_JS } from "./webviewUtils";
 
 export class ReviewPanel {
   public static current: ReviewPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private readonly orchestrator: ReviewOrchestrator;
+  private readonly promptBuilder: PromptBuilder;
   private readonly github: GitHubClient;
   private readonly store: ScoreStore;
   private repo: string = "";
@@ -39,7 +41,8 @@ export class ReviewPanel {
     this.panel = panel;
     this.github = github;
     this.store = store;
-    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(), new PromptBuilder(), store);
+    this.promptBuilder = new PromptBuilder();
+    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(), this.promptBuilder, store);
 
     this.panel.webview.html = this.getHtml();
     this.panel.webview.onDidReceiveMessage((msg: WebviewMessage) => this.handleMessage(msg), null, this.disposables);
@@ -61,6 +64,9 @@ export class ReviewPanel {
         break;
       case "gradeWithClaude":
         await this.gradeWithClaude();
+        break;
+      case "openGradePanel":
+        await vscode.commands.executeCommand("fleetReview.gradeReview");
         break;
     }
   }
@@ -85,8 +91,7 @@ export class ReviewPanel {
         this.github.getPRDiff(this.repo, prNumber),
       ]);
 
-      const promptBuilder = new PromptBuilder();
-      const projectType = Config.workspaceRoot ? promptBuilder.detectProjectType(Config.workspaceRoot) : "unknown";
+      const projectType = Config.workspaceRoot ? this.promptBuilder.detectProjectType(Config.workspaceRoot) : "unknown";
 
       const review = await this.orchestrator.runReview(this.repo, pr, diff, models, projectType, (model, status) => {
         this.post({ type: "reviewProgress", model, status });
@@ -293,8 +298,7 @@ export class ReviewPanel {
     document.getElementById('btn-refresh').onclick = requestPRs;
     document.getElementById('btn-cancel').onclick = () => vscode.postMessage({ type: 'cancelReview' });
     document.getElementById('btn-grade-manual').onclick = () => {
-      // Navigate to grading panel (handled by extension command)
-      vscode.postMessage({ type: 'submitGrades', scores: [] });
+      vscode.postMessage({ type: 'openGradePanel' });
     };
     document.getElementById('btn-grade-claude').onclick = () => vscode.postMessage({ type: 'gradeWithClaude' });
     document.getElementById('btn-new-review').onclick = resetToSelect;
@@ -461,11 +465,7 @@ export class ReviewPanel {
     }).join('');
   }
 
-  function escapeHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
+  ${ESCAPE_HTML_JS}
 
   if (document.readyState === 'complete') {
     setTimeout(init, 0);

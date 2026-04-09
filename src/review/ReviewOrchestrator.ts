@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import * as vscode from 'vscode';
 
 import {
   ModelName,
@@ -21,7 +22,8 @@ export class ReviewOrchestrator {
     private github: GitHubClient,
     private dispatcher: CliDispatcher,
     private promptBuilder: PromptBuilder,
-    private store: ScoreStore
+    private store: ScoreStore,
+    private output?: vscode.OutputChannel
   ) {}
 
   get isRunning(): boolean {
@@ -161,7 +163,11 @@ export class ReviewOrchestrator {
 
     // Post merged report
     const comment = `## Merged Audit Report\n\n${result.stdout}\n\n---\n_Consolidated from independent audits via Fleet Review_`;
-    await this.github.postComment(repo, prNumber, comment);
+    try {
+      await this.github.postComment(repo, prNumber, comment);
+    } catch (e) {
+      this.output?.appendLine(`Fleet Review: failed to post merged report: ${e instanceof Error ? e.message : String(e)}`);
+    }
 
     // Update review record
     review.mergedReport = result.stdout;

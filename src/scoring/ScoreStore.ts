@@ -9,6 +9,9 @@ import {
 import { Config } from '../config';
 
 export class ScoreStore {
+  private reviewsCache: ReviewRecord[] | null = null;
+  private scoresCache: ScoreEntry[] | null = null;
+
   private get dir(): string {
     return Config.dataDir;
   }
@@ -33,6 +36,11 @@ export class ScoreStore {
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
+  invalidateCache(): void {
+    this.reviewsCache = null;
+    this.scoresCache = null;
+  }
+
   // --- Reviews ---
 
   saveReview(review: ReviewRecord): void {
@@ -45,13 +53,23 @@ export class ScoreStore {
       reviews.push(review);
     }
     fs.writeFileSync(this.reviewsPath, JSON.stringify(reviews, null, 2));
+    this.reviewsCache = reviews;
   }
 
   loadReviews(): ReviewRecord[] {
+    if (this.reviewsCache !== null) {
+      return this.reviewsCache;
+    }
     try {
       const raw = fs.readFileSync(this.reviewsPath, 'utf-8');
-      return JSON.parse(raw);
-    } catch {
+      this.reviewsCache = JSON.parse(raw);
+      return this.reviewsCache!;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.reviewsCache = [];
+        return this.reviewsCache;
+      }
+      console.warn(`Fleet Review: failed to read ${this.reviewsPath}: ${err}`);
       return [];
     }
   }
@@ -72,6 +90,7 @@ export class ScoreStore {
     const scores = this.loadScores();
     scores.push(entry);
     fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
+    this.scoresCache = scores;
   }
 
   saveScores(entries: ScoreEntry[]): void {
@@ -79,13 +98,23 @@ export class ScoreStore {
     const scores = this.loadScores();
     scores.push(...entries);
     fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
+    this.scoresCache = scores;
   }
 
   loadScores(): ScoreEntry[] {
+    if (this.scoresCache !== null) {
+      return this.scoresCache;
+    }
     try {
       const raw = fs.readFileSync(this.scoresPath, 'utf-8');
-      return JSON.parse(raw);
-    } catch {
+      this.scoresCache = JSON.parse(raw);
+      return this.scoresCache!;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.scoresCache = [];
+        return this.scoresCache;
+      }
+      console.warn(`Fleet Review: failed to read ${this.scoresPath}: ${err}`);
       return [];
     }
   }
@@ -158,21 +187,33 @@ export class ScoreStore {
       const raw = fs.readFileSync(this.pendingScoresPath, 'utf-8');
       const data = JSON.parse(raw);
 
-      // Validate structure
-      if (!data.reviewId || !Array.isArray(data.scores)) {
-        return null;
+      // Canonical format: { reviewId, scores: [...] }
+      if (data.reviewId && Array.isArray(data.scores)) {
+        return data.scores.map(
+          (s: { model: string; score: number; feedback: string }) => ({
+            reviewId: data.reviewId,
+            model: s.model,
+            score: Math.max(1, Math.min(10, Math.round(s.score))),
+            feedback: s.feedback ?? '',
+            gradedBy: 'claude' as const,
+            timestamp: new Date().toISOString(),
+          })
+        );
       }
 
-      return data.scores.map(
-        (s: { model: string; score: number; feedback: string }) => ({
-          reviewId: data.reviewId,
+      // Fallback: flat ScoreEntry array (reviewId on each item)
+      if (Array.isArray(data) && data.length > 0 && data[0].reviewId && data[0].model) {
+        return data.map((s: ScoreEntry) => ({
+          reviewId: s.reviewId,
           model: s.model,
           score: Math.max(1, Math.min(10, Math.round(s.score))),
           feedback: s.feedback ?? '',
           gradedBy: 'claude' as const,
           timestamp: new Date().toISOString(),
-        })
-      );
+        }));
+      }
+
+      return null;
     } catch {
       return null;
     }

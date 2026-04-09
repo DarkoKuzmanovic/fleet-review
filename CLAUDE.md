@@ -80,6 +80,20 @@ npm run watch            # dev build with watch
 - `last-review.json` — written by extension for Claude Code to read
 - `pending-scores.json` — written by Claude Code, auto-imported by extension
 
+### pending-scores.json format (exact shape required)
+
+```json
+{
+  "reviewId": "<id from last-review.json>",
+  "scores": [
+    { "model": "gemini", "score": 9, "feedback": "..." },
+    { "model": "codex",  "score": 8, "feedback": "..." }
+  ]
+}
+```
+
+`score` must be 1–10. `gradedBy` and `timestamp` are added automatically by the importer — do not include them.
+
 ## Webview Pitfall: No `\'` in Template Literals
 
 Webview HTML is generated inside TypeScript template literals (backticks). **Never use `\'` inside a template literal** — it silently becomes `'` and breaks JS string parsing in the rendered `<script>` block. The entire script dies with no error.

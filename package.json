@@ -113,7 +113,7 @@
     "compile": "webpack --mode production",
     "watch": "webpack --mode development --watch",
     "lint": "tsc --noEmit",
-    "package": "vsce package"
+    "package": "vsce package --out releases/"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

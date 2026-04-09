@@ -7,10 +7,12 @@ import { CliDispatcher } from "../review/CliDispatcher";
 import { PromptBuilder } from "../review/PromptBuilder";
 import { ReviewOrchestrator } from "../review/ReviewOrchestrator";
 import { ScoreStore } from "../scoring/ScoreStore";
+import { ESCAPE_HTML_JS } from "./webviewUtils";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private orchestrator: ReviewOrchestrator;
+  private promptBuilder: PromptBuilder;
   private repo = "";
   private pendingTimeouts = new Map<string, (decision: TimeoutDecision) => void>();
 
@@ -20,7 +22,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private store: ScoreStore,
     private output: vscode.OutputChannel,
   ) {
-    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(output), new PromptBuilder(), store);
+    this.promptBuilder = new PromptBuilder();
+    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(output), this.promptBuilder, store, output);
   }
 
   resolveWebviewView(
@@ -106,8 +109,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.github.getPRDiff(this.repo, prNumber),
       ]);
 
-      const promptBuilder = new PromptBuilder();
-      const projectType = Config.workspaceRoot ? promptBuilder.detectProjectType(Config.workspaceRoot) : "unknown";
+      const projectType = Config.workspaceRoot ? this.promptBuilder.detectProjectType(Config.workspaceRoot) : "unknown";
 
       const review = await this.orchestrator.runReview(this.repo, pr, diff, models, projectType, (model, status) => {
         this.post({ type: "reviewProgress", model, status });
@@ -130,6 +132,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         type: "reviewError",
         error: err instanceof Error ? err.message : String(err),
       });
+    } finally {
+      for (const resolve of this.pendingTimeouts.values()) {
+        resolve('kill');
+      }
+      this.pendingTimeouts.clear();
     }
   }
 
@@ -788,11 +795,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   });
 
-  function escapeHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
+  ${ESCAPE_HTML_JS}
 
   // Defer init so the VS Code webview message bridge is ready
   setTimeout(init, 50);
