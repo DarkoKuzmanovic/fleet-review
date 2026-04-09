@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -249,7 +250,7 @@ export class CliDispatcher {
   private async writeTempPrompt(model: string, prompt: string): Promise<string> {
     const filePath = path.join(
       os.tmpdir(),
-      `fleet-review-${model}-${Date.now()}.md`
+      `fleet-review-${model}-${randomUUID()}.md`
     );
     await fs.promises.writeFile(filePath, prompt, 'utf-8');
     return filePath;

@@ -66,7 +66,7 @@ export class ReviewPanel {
         await this.gradeWithClaude();
         break;
       case "openGradePanel":
-        vscode.commands.executeCommand("fleetReview.gradeReview");
+        await vscode.commands.executeCommand("fleetReview.gradeReview");
         break;
     }
   }

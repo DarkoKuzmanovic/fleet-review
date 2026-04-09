@@ -23,7 +23,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private output: vscode.OutputChannel,
   ) {
     this.promptBuilder = new PromptBuilder();
-    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(output), this.promptBuilder, store);
+    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(output), this.promptBuilder, store, output);
   }
 
   resolveWebviewView(
@@ -133,6 +133,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
+      for (const resolve of this.pendingTimeouts.values()) {
+        resolve('kill');
+      }
       this.pendingTimeouts.clear();
     }
   }
