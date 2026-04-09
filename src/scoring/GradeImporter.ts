@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { ScoreEntry } from '../types';
@@ -21,7 +22,7 @@ export class GradeImporter implements vscode.Disposable {
 
     try {
       this.watcher = fs.watch(
-        filePath.substring(0, filePath.lastIndexOf('/')),
+        path.dirname(filePath),
         (eventType, filename) => {
           if (filename === 'pending-scores.json') {
             this.tryImport();

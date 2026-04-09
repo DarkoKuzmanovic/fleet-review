@@ -161,7 +161,11 @@ export class ReviewOrchestrator {
 
     // Post merged report
     const comment = `## Merged Audit Report\n\n${result.stdout}\n\n---\n_Consolidated from independent audits via Fleet Review_`;
-    await this.github.postComment(repo, prNumber, comment);
+    try {
+      await this.github.postComment(repo, prNumber, comment);
+    } catch (e) {
+      console.error(`Fleet Review: failed to post merged report: ${e}`);
+    }
 
     // Update review record
     review.mergedReport = result.stdout;

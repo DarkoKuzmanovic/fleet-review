@@ -99,6 +99,7 @@ export type WebviewMessage =
   | { type: 'killModel'; model: string }
   | { type: 'submitGrades'; scores: Array<{ model: string; score: number; feedback: string }> }
   | { type: 'gradeWithClaude' }
+  | { type: 'openGradePanel' }
   | { type: 'requestLeaderboard'; timeframe: 'week' | 'month' | 'all' }
   | { type: 'requestReviewHistory' };
 

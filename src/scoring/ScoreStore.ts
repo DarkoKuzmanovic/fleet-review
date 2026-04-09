@@ -9,6 +9,9 @@ import {
 import { Config } from '../config';
 
 export class ScoreStore {
+  private reviewsCache: ReviewRecord[] | null = null;
+  private scoresCache: ScoreEntry[] | null = null;
+
   private get dir(): string {
     return Config.dataDir;
   }
@@ -44,14 +47,20 @@ export class ScoreStore {
     } else {
       reviews.push(review);
     }
+    this.reviewsCache = reviews;
     fs.writeFileSync(this.reviewsPath, JSON.stringify(reviews, null, 2));
   }
 
   loadReviews(): ReviewRecord[] {
+    if (this.reviewsCache !== null) {
+      return this.reviewsCache;
+    }
     try {
       const raw = fs.readFileSync(this.reviewsPath, 'utf-8');
-      return JSON.parse(raw);
+      this.reviewsCache = JSON.parse(raw);
+      return this.reviewsCache!;
     } catch {
+      this.reviewsCache = [];
       return [];
     }
   }
@@ -71,6 +80,7 @@ export class ScoreStore {
     this.ensureDir();
     const scores = this.loadScores();
     scores.push(entry);
+    this.scoresCache = scores;
     fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
   }
 
@@ -78,14 +88,20 @@ export class ScoreStore {
     this.ensureDir();
     const scores = this.loadScores();
     scores.push(...entries);
+    this.scoresCache = scores;
     fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
   }
 
   loadScores(): ScoreEntry[] {
+    if (this.scoresCache !== null) {
+      return this.scoresCache;
+    }
     try {
       const raw = fs.readFileSync(this.scoresPath, 'utf-8');
-      return JSON.parse(raw);
+      this.scoresCache = JSON.parse(raw);
+      return this.scoresCache!;
     } catch {
+      this.scoresCache = [];
       return [];
     }
   }
