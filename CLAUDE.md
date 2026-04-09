@@ -111,6 +111,14 @@ btn.onclick = function() { vscode.postMessage({ type: 'foo' }); };
 actions.appendChild(btn);
 ```
 
+## Changelog
+
+This project maintains a [CHANGELOG.md](CHANGELOG.md) following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. When making changes:
+
+- Add an entry under `## [Unreleased]` for every user-facing change (bug fix, new feature, breaking change)
+- Use `### Added`, `### Fixed`, `### Changed`, `### Removed` subsections
+- When releasing, move Unreleased entries to a new `## [x.y.z] - YYYY-MM-DD` section and bump the version in `package.json`
+
 ## Known Issues / Design Decisions
 
 - Claude CLI has ~7KB stdin limit — CliDispatcher writes prompt to temp file to work around this
