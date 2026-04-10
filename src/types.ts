@@ -103,7 +103,10 @@ export type WebviewMessage =
   | { type: 'gradeWithClaude' }
   | { type: 'openGradePanel' }
   | { type: 'requestLeaderboard'; timeframe: 'week' | 'month' | 'all' }
-  | { type: 'requestReviewHistory' };
+  | { type: 'requestReviewHistory' }
+  | { type: 'retryModel'; model: ModelName }
+  | { type: 'retryAllFailed' }
+  | { type: 'checkModelHealth' };
 
 export type ExtensionMessage =
   | { type: 'prs'; prs: PR[] }
@@ -114,4 +117,6 @@ export type ExtensionMessage =
   | { type: 'leaderboard'; stats: ModelStats[] }
   | { type: 'reviewHistory'; reviews: ReviewRecord[] }
   | { type: 'gradesImported'; scores: ScoreEntry[] }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'modelHealth'; health: Record<string, boolean> }
+  | { type: 'reviewChunk'; model: string; text: string };

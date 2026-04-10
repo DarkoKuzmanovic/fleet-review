@@ -65,6 +65,12 @@ export class Config {
     return key || process.env.NANO_GPT_API_KEY || '';
   }
 
+  static get diffSizeWarningThreshold(): number {
+    return vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<number>('diffSizeWarningThreshold', 1500);
+  }
+
   static get workspaceRoot(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }

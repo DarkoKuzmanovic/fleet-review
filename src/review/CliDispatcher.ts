@@ -21,7 +21,8 @@ export class CliDispatcher {
     onBytes?: (bytes: number) => void,
     signal?: AbortSignal,
     onTimeout?: () => Promise<TimeoutDecision>,
-    timeoutMs?: number
+    timeoutMs?: number,
+    onText?: (text: string) => void
   ): Promise<CliResult> {
     this.log(`Dispatching ${model}`);
 
@@ -33,19 +34,19 @@ export class CliDispatcher {
     try {
       switch (model) {
         case 'claude':
-          return await this.spawnWithStdin('claude', ['-p', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout, timeoutMs);
+          return await this.spawnWithStdin('claude', ['-p', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout, timeoutMs, onText);
         case 'codex':
-          return await this.spawnWithStdin('codex', ['exec', '--dangerously-bypass-approvals-and-sandbox', '-'], promptFile, onBytes, signal, onTimeout, timeoutMs);
+          return await this.spawnWithStdin('codex', ['exec', '--dangerously-bypass-approvals-and-sandbox', '-'], promptFile, onBytes, signal, onTimeout, timeoutMs, onText);
         case 'gemini':
           const geminiArgs = ['-e', '', '-p', 'Review the provided code', '--output-format', 'text'];
           if (Config.geminiModel !== 'auto') {
             geminiArgs.unshift('--model', Config.geminiModel);
           }
-          return await this.spawnWithStdin('gemini', geminiArgs, promptFile, onBytes, signal, onTimeout, timeoutMs);
+          return await this.spawnWithStdin('gemini', geminiArgs, promptFile, onBytes, signal, onTimeout, timeoutMs, onText);
         case 'qwen':
-          return await this.spawnWithStdin('qwen', ['-p', '', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout, timeoutMs);
+          return await this.spawnWithStdin('qwen', ['-p', '', '--output-format', 'text'], promptFile, onBytes, signal, onTimeout, timeoutMs, onText);
         case 'copilot':
-          return await this.spawnWithStdin('copilot', ['-p', '', '-s', '--model', 'gpt-5.3-codex', '--effort', 'high', '--allow-all-tools'], promptFile, onBytes, signal, onTimeout, timeoutMs);
+          return await this.spawnWithStdin('copilot', ['-p', '', '-s', '--model', 'gpt-5.3-codex', '--effort', 'high', '--allow-all-tools'], promptFile, onBytes, signal, onTimeout, timeoutMs, onText);
         default:
           throw new Error(`Unknown model: ${model}`);
       }
@@ -142,7 +143,8 @@ export class CliDispatcher {
     onBytes?: (bytes: number) => void,
     signal?: AbortSignal,
     onTimeout?: () => Promise<TimeoutDecision>,
-    overrideTimeoutMs?: number
+    overrideTimeoutMs?: number,
+    onText?: (text: string) => void
   ): Promise<CliResult> {
     const timeoutMs = overrideTimeoutMs ?? Config.timeoutMs;
 
@@ -222,10 +224,12 @@ export class CliDispatcher {
       signal?.addEventListener('abort', onAbort, { once: true });
 
       proc.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
+        const text = chunk.toString();
+        stdout += text;
         totalBytes += chunk.length;
         bytesSinceLastCheck += chunk.length;
         if (onBytes) onBytes(totalBytes);
+        if (onText) onText(text);
       });
 
       proc.stderr.on('data', (chunk: Buffer) => {

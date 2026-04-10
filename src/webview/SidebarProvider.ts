@@ -1,3 +1,5 @@
+import { execFile } from "child_process";
+import { promisify } from "util";
 import * as vscode from "vscode";
 
 import { ExtensionMessage, API_MODELS, ModelName, MODEL_NAMES, TimeoutDecision, WebviewMessage } from "../types";
@@ -14,6 +16,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private orchestrator: ReviewOrchestrator;
   private promptBuilder: PromptBuilder;
   private repo = "";
+  private lastReview: import("../types").ReviewRecord | null = null;
   private pendingTimeouts = new Map<string, (decision: TimeoutDecision) => void>();
 
   constructor(
@@ -84,6 +87,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       case "requestLeaderboard":
         this.sendLeaderboard(msg.timeframe);
         break;
+      case "retryModel":
+        if (!MODEL_NAMES.includes(msg.model)) {
+          this.post({ type: "error", message: `Invalid model: ${msg.model}` });
+          break;
+        }
+        await this.retryModel(msg.model);
+        break;
+      case "retryAllFailed":
+        await this.retryAllFailed();
+        break;
+      case "checkModelHealth":
+        await this.checkModelHealth();
+        break;
+      case "requestReviewHistory":
+        this.post({ type: "reviewHistory", reviews: this.store.getRecentReviews(20) });
+        break;
     }
   }
 
@@ -126,8 +145,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             this.pendingTimeouts.set(model, resolve);
           });
         },
+        (model, text) => {
+          this.post({ type: "reviewChunk", model, text });
+        },
       );
 
+      this.lastReview = review;
       this.post({ type: "reviewComplete", review });
 
       const successCount = Object.values(review.results).filter((r) => r.success).length;
@@ -182,6 +205,87 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.post({ type: "leaderboard", stats });
   }
 
+  private async checkModelHealth(): Promise<void> {
+    const execFileAsync = promisify(execFile);
+    const health: Record<string, boolean> = {};
+
+    for (const model of MODEL_NAMES) {
+      if (API_MODELS.has(model)) {
+        health[model] = Config.nanoGptApiKey.length > 0;
+      } else {
+        try {
+          await execFileAsync(process.platform === 'win32' ? 'where' : 'which', [model]);
+          health[model] = true;
+        } catch {
+          health[model] = false;
+        }
+      }
+    }
+
+    this.post({ type: "modelHealth", health });
+  }
+
+  private async retryModelCore(model: ModelName): Promise<void> {
+    if (!this.lastReview) {
+      throw new Error("No review to retry");
+    }
+
+    const updated = await this.orchestrator.retrySingleModel(
+      model,
+      this.lastReview,
+      (m, status) => this.post({ type: "reviewProgress", model: m, status }),
+      (m, bytes) => this.post({ type: "reviewBytes", model: m, bytes }),
+      (m) => new Promise<TimeoutDecision>((resolve) => {
+        this.pendingTimeouts.set(m, resolve);
+      }),
+      (m, text) => this.post({ type: "reviewChunk", model: m, text }),
+    );
+
+    this.lastReview = updated;
+  }
+
+  private async retryModel(model: ModelName): Promise<void> {
+    try {
+      await this.retryModelCore(model);
+      if (this.lastReview) {
+        this.post({ type: "reviewComplete", review: this.lastReview });
+      }
+    } catch (err) {
+      this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      for (const resolve of this.pendingTimeouts.values()) {
+        resolve("kill");
+      }
+      this.pendingTimeouts.clear();
+    }
+  }
+
+  private async retryAllFailed(): Promise<void> {
+    if (!this.lastReview) return;
+
+    const failedModels = Object.entries(this.lastReview.results)
+      .filter(([, r]) => !r.success)
+      .map(([m]) => m as ModelName);
+
+    if (failedModels.length === 0) return;
+
+    try {
+      for (const model of failedModels) {
+        await this.retryModelCore(model);
+      }
+      if (this.lastReview) {
+        this.post({ type: "reviewComplete", review: this.lastReview });
+      }
+    } catch (err) {
+      this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      for (const resolve of this.pendingTimeouts.values()) {
+        resolve("kill");
+      }
+      this.pendingTimeouts.clear();
+    }
+  }
+
   private post(msg: ExtensionMessage): void {
     this.view?.webview.postMessage(msg);
   }
@@ -192,6 +296,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const timeoutSec = Config.timeoutMs / 1000;
     const modelTimeoutsJson = JSON.stringify(Config.modelTimeouts);
     const apiModelsJson = JSON.stringify([...API_MODELS]);
+    const diffSizeThreshold = Config.diffSizeWarningThreshold;
+    const modelStatsJson = JSON.stringify(this.store.getModelStats("all"));
     const webview = this.view!.webview;
     const cliIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "cli.svg"));
     const apiIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "api.svg"));
@@ -389,12 +495,125 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   /* ─── Model type glyph ─── */
   .model-glyph {
-    width: 14px; height: 14px; vertical-align: middle; opacity: 0.7;
-    margin-right: 2px; flex-shrink: 0;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-right: 2px;
+    flex-shrink: 0;
+    background-color: currentColor;
+    opacity: 0.85;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
   }
 
   /* ─── Empty states ─── */
   .empty-state { color: var(--desc-fg); padding: 24px 0; text-align: center; font-size: 13px; }
+
+  /* ─── Skeleton loading ─── */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes entranceSlide {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .entrance { animation: entranceSlide 0.3s ease-out forwards; }
+  .skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
+  }
+  .skeleton-row {
+    height: 32px;
+    margin-bottom: 6px;
+  }
+  .skeleton-row:last-child { margin-bottom: 0; }
+  .skeleton-row.narrow { width: 70%; }
+  .skeleton-row.short { height: 18px; }
+  .skeleton-table-row {
+    display: flex; gap: 12px; padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .skeleton-table-row .skeleton-cell { height: 14px; flex: 1; }
+  .skeleton-table-row .skeleton-cell:first-child { flex: 2; }
+  .skeleton-table-row .skeleton-cell:last-child { flex: 1.5; }
+
+  /* ─── Summary card ─── */
+  .summary-card {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden; margin-bottom: 12px;
+  }
+  .summary-stat {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 10px 12px; background: var(--bg);
+  }
+  .summary-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--desc-fg); font-weight: 600;
+  }
+  .summary-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .summary-detail { font-size: 11px; color: var(--desc-fg); }
+
+  /* ─── Progress ring ─── */
+  .progress-ring {
+    display: none; width: 20px; height: 20px; border-radius: 50%;
+    flex-shrink: 0; margin-right: 6px;
+    background: conic-gradient(var(--vscode-testing-iconPassed) 0deg, transparent 0deg);
+    -webkit-mask: radial-gradient(circle, transparent 55%, black 56%);
+    mask: radial-gradient(circle, transparent 55%, black 56%);
+  }
+  .progress-ring.active { display: inline-block; }
+
+  /* ─── Chunk preview ─── */
+  .chunk-preview {
+    display: none; width: 100%; margin-top: 4px; padding: 6px 8px;
+    background: var(--input-bg); border-radius: 4px; border: 1px solid var(--border);
+    font-size: 11px; line-height: 1.3; color: var(--desc-fg);
+    max-height: 60px; overflow: hidden; white-space: pre-wrap;
+    font-family: var(--vscode-editor-font-family, monospace);
+  }
+  .chunk-preview.active { display: block; }
+
+  /* ─── Warning banner ─── */
+  /* ─── Health dots ─── */
+  .health-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--desc-fg); opacity: 0.4; flex-shrink: 0;
+  }
+  .health-dot.available { background: var(--vscode-testing-iconPassed); opacity: 1; }
+  .health-dot.unavailable { background: var(--vscode-testing-iconFailed); opacity: 1; }
+  .suggested-badge {
+    display: none; padding: 1px 6px; border-radius: 8px; font-size: 10px;
+    font-weight: 600; background: var(--vscode-testing-iconPassed); color: #fff;
+    margin-left: auto;
+  }
+  .suggested-badge.visible { display: inline-block; }
+
+  /* ─── History list ─── */
+  .history-list { max-height: 240px; overflow-y: auto; }
+  .history-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 8px; margin: 0 -8px; border-radius: 4px; cursor: pointer;
+    font-size: 12px; transition: background 0.1s;
+  }
+  .history-item:hover { background: var(--list-hover); }
+  .history-pr { font-weight: 500; }
+  .history-date { color: var(--desc-fg); font-size: 11px; white-space: nowrap; margin-left: 8px; }
+
+  .warning-banner {
+    padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 12px;
+    background: rgba(255,204,0,0.08);
+    border-left: 3px solid var(--vscode-editorWarning-foreground);
+    color: var(--fg); line-height: 1.4;
+  }
 </style>
 </head>
 <body>
@@ -412,9 +631,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   <!-- State: Select -->
   <div id="state-select">
     <h2>Pull Request</h2>
-    <select id="pr-select" disabled>
+    <div id="pr-skeleton">
+      <div class="skeleton skeleton-row"></div>
+      <div class="skeleton skeleton-row narrow"></div>
+      <div class="skeleton skeleton-row" style="width:85%"></div>
+    </div>
+    <select id="pr-select" class="hidden" disabled>
       <option>Loading PRs...</option>
     </select>
+
+    <div id="diff-size-warning" class="warning-banner hidden"></div>
 
     <h2>Models</h2>
     <div id="model-checkboxes" class="checkbox-group"></div>
@@ -422,6 +648,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     <button id="btn-start" disabled>Start Review</button>
     <button id="btn-refresh" class="secondary">Refresh PRs</button>
     <div id="pr-error" class="error hidden"></div>
+
+    <h2>History</h2>
+    <div id="history-list" class="history-list">
+      <p class="empty-state">No past reviews.</p>
+    </div>
   </div>
 
   <!-- State: Progress -->
@@ -462,7 +693,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     <button data-tf="all" class="active">All</button>
   </div>
   <div id="leaderboard-content">
-    <p class="empty-state">No scores yet.</p>
+    <div id="scores-skeleton">
+      <div class="skeleton-table-row"><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div></div>
+      <div class="skeleton-table-row"><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div></div>
+      <div class="skeleton-table-row"><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div></div>
+      <div class="skeleton-table-row"><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div></div>
+    </div>
   </div>
 </div>
 
@@ -475,10 +711,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   const API_MODELS = new Set(${apiModelsJson});
   const CLI_ICON = ${JSON.stringify(cliIconUri.toString())};
   const API_ICON = ${JSON.stringify(apiIconUri.toString())};
+  const DIFF_SIZE_THRESHOLD = ${diffSizeThreshold};
+  const MODEL_STATS = ${modelStatsJson};
 
   let prs = [];
   let currentReview = null;
   let prLoadTimer = null;
+  var chunkBuffers = {};
+  var reviewHistory = [];
+  var isViewingHistory = false;
 
   // ─── Tab switching ───
   document.querySelectorAll('.tabs button').forEach(btn => {
@@ -501,6 +742,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   function init() {
     buildModelCheckboxes();
     requestPRs();
+    vscode.postMessage({ type: 'checkModelHealth' });
+    vscode.postMessage({ type: 'requestReviewHistory' });
 
     document.getElementById('btn-start').onclick = startReview;
     document.getElementById('btn-refresh').onclick = requestPRs;
@@ -519,7 +762,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   function showPrError(message, optionLabel) {
     clearPrLoadTimer();
+    var skel = document.getElementById('pr-skeleton');
+    if (skel) skel.classList.add('hidden');
     const sel = document.getElementById('pr-select');
+    sel.classList.remove('hidden');
     sel.disabled = false;
     sel.innerHTML = '<option disabled>' + optionLabel + '</option>';
     document.getElementById('btn-start').disabled = true;
@@ -529,7 +775,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   function requestPRs() {
     clearPrLoadTimer();
-    const sel = document.getElementById('pr-select');
+    var skel = document.getElementById('pr-skeleton');
+    var sel = document.getElementById('pr-select');
+    if (skel) skel.classList.remove('hidden');
+    sel.classList.add('hidden');
     sel.disabled = true;
     sel.innerHTML = '<option>Loading PRs...</option>';
     document.getElementById('btn-start').disabled = true;
@@ -549,14 +798,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     var isApi = API_MODELS.has(m);
     var src = isApi ? API_ICON : CLI_ICON;
     var title = isApi ? 'API' : 'CLI';
-    return '<img class="model-glyph" src="' + escapeHtml(src) + '" alt="' + title + '" title="' + title + '"> ';
+    var escapedSrc = escapeHtml(src);
+    return '<span class="model-glyph" title="' + title + '" style="-webkit-mask-image:url(' + escapedSrc + ');mask-image:url(' + escapedSrc + ');"></span> ';
   }
 
   function buildModelCheckboxes() {
     document.getElementById('model-checkboxes').innerHTML = ALL_MODELS.map(m =>
       '<label><input type="checkbox" value="' + m + '"' +
-      (DEFAULT_MODELS.includes(m) ? ' checked' : '') + '> ' + modelGlyphHtml(m) + m + '</label>'
+      (DEFAULT_MODELS.includes(m) ? ' checked' : '') + '> ' +
+      '<span class="health-dot" data-model="' + m + '" title="checking..."></span> ' +
+      modelGlyphHtml(m) + m +
+      '<span class="suggested-badge" data-model="' + m + '">Suggested</span></label>'
     ).join('');
+    applySuggestedBadges();
+  }
+
+  function applySuggestedBadges() {
+    if (!MODEL_STATS || !MODEL_STATS.length) return;
+    var suggested = MODEL_STATS
+      .filter(function(s) { return s.totalReviews >= 3 && s.avgScore >= 7; })
+      .slice(0, 3)
+      .map(function(s) { return s.model; });
+    suggested.forEach(function(m) {
+      var badge = document.querySelector('.suggested-badge[data-model="' + m + '"]');
+      if (badge) badge.classList.add('visible');
+    });
   }
 
   function getSelectedModels() {
@@ -579,11 +845,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (!models.length || isNaN(prNumber)) return;
 
     showState('progress');
+    isViewingHistory = false;
+    chunkBuffers = {};
     document.getElementById('progress-models').innerHTML = models.map(m =>
-      '<div class="model-row" id="progress-' + m + '">' +
+      '<div class="model-row entrance" id="progress-' + m + '">' +
+      '<span class="progress-ring" id="ring-' + m + '"></span>' +
       '<span class="name">' + modelGlyphHtml(m) + m + '</span>' +
       '<span class="elapsed"></span>' +
-      '<span class="badge pending">pending</span></div>'
+      '<span class="badge pending">pending</span>' +
+      '<pre class="chunk-preview" id="chunks-' + m + '"></pre>' +
+      '</div>'
     ).join('');
 
     startElapsedTimer();
@@ -592,7 +863,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   function renderPRs() {
     clearPrLoadTimer();
+    var skel = document.getElementById('pr-skeleton');
+    if (skel) skel.classList.add('hidden');
     const sel = document.getElementById('pr-select');
+    sel.classList.remove('hidden');
     sel.disabled = false;
     document.getElementById('btn-start').disabled = false;
     document.getElementById('pr-error').classList.add('hidden');
@@ -606,6 +880,26 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       '<option value="' + pr.number + '">#' + pr.number + ' ' + escapeHtml(pr.title) +
       ' (+' + pr.additions + '/-' + pr.deletions + ')</option>'
     ).join('');
+    sel.onchange = checkDiffSize;
+    checkDiffSize();
+  }
+
+  function checkDiffSize() {
+    var sel = document.getElementById('pr-select');
+    var warn = document.getElementById('diff-size-warning');
+    var prNum = parseInt(sel.value, 10);
+    var pr = prs.find(function(p) { return p.number === prNum; });
+    if (pr) {
+      var total = pr.additions + pr.deletions;
+      if (total > DIFF_SIZE_THRESHOLD) {
+        warn.textContent = 'This PR has ' + total + ' changed lines. Reviews may be slower or truncated.';
+        warn.classList.remove('hidden');
+      } else {
+        warn.classList.add('hidden');
+      }
+    } else {
+      warn.classList.add('hidden');
+    }
   }
 
   var modelStartTimes = {};
@@ -636,6 +930,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         anyRunning = true;
         var el = document.querySelector('#progress-' + model + ' .elapsed');
         if (el) el.textContent = fmtElapsed(now - info.start);
+
+        // Update progress ring
+        var ring = document.getElementById('ring-' + model);
+        if (ring) {
+          var timeout = (MODEL_TIMEOUTS[model] ?? TIMEOUT_SEC) * 1000;
+          var elapsed = now - info.start;
+          var pct = Math.min(elapsed / timeout, 1);
+          var deg = Math.round(pct * 360);
+          var color = pct < 0.7 ? 'var(--vscode-testing-iconPassed)'
+            : pct < 0.9 ? 'var(--vscode-editorWarning-foreground)'
+            : 'var(--vscode-testing-iconFailed)';
+          ring.style.background = 'conic-gradient(' + color + ' 0deg, ' + color + ' ' + deg + 'deg, transparent ' + deg + 'deg)';
+        }
       }
     });
     if (!anyRunning) stopElapsedTimer();
@@ -672,6 +979,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       row.appendChild(actions);
     }
 
+    // Show/hide progress ring
+    var ring = document.getElementById('ring-' + model);
+    if (ring) {
+      if (status === 'running' || status === 'timeout-pending') {
+        ring.classList.add('active');
+      } else {
+        ring.classList.remove('active');
+      }
+    }
+
     if (status === 'running' && !modelStartTimes[model]) {
       modelStartTimes[model] = { start: Date.now(), ended: false };
     }
@@ -698,25 +1015,96 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     el.textContent = time + ' · ' + fmtBytes(bytes);
   }
 
+  function renderSummaryCard(review) {
+    var models = Object.keys(review.results);
+    var ok = models.filter(function(m) { return review.results[m].success; });
+    var fail = models.filter(function(m) { return !review.results[m].success; });
+    var durations = models.map(function(m) { return review.results[m].durationMs; });
+    var avgDur = durations.length ? durations.reduce(function(a, b) { return a + b; }, 0) / durations.length / 1000 : 0;
+    var fastest = durations.length ? Math.min.apply(null, durations) / 1000 : 0;
+    var slowest = durations.length ? Math.max.apply(null, durations) / 1000 : 0;
+    var posted = models.filter(function(m) { return review.results[m].postedToGitHub; }).length;
+    var totalKB = models.reduce(function(sum, m) { return sum + review.results[m].output.length; }, 0) / 1024;
+
+    var statusDetail = ok.length + '/' + models.length + ' done';
+    if (fail.length) statusDetail += ', ' + fail.length + ' failed';
+
+    return '<div class="summary-card">' +
+      '<div class="summary-stat"><div class="summary-label">Status</div>' +
+        '<div class="summary-value">' + ok.length + '/' + models.length + '</div>' +
+        '<div class="summary-detail">' + (fail.length ? fail.join(', ') + ' failed' : 'all passed') + '</div></div>' +
+      '<div class="summary-stat"><div class="summary-label">Duration</div>' +
+        '<div class="summary-value">' + avgDur.toFixed(1) + 's</div>' +
+        '<div class="summary-detail">' + fastest.toFixed(0) + 's – ' + slowest.toFixed(0) + 's</div></div>' +
+      '<div class="summary-stat"><div class="summary-label">GitHub</div>' +
+        '<div class="summary-value">' + posted + '</div>' +
+        '<div class="summary-detail">comment' + (posted !== 1 ? 's' : '') + ' posted</div></div>' +
+      '<div class="summary-stat"><div class="summary-label">Output</div>' +
+        '<div class="summary-value">' + totalKB.toFixed(1) + '</div>' +
+        '<div class="summary-detail">KB total</div></div>' +
+    '</div>';
+  }
+
   function renderResults(review) {
     showState('results');
     const models = Object.keys(review.results);
-    const ok = models.filter(m => review.results[m].success);
-    const fail = models.filter(m => !review.results[m].success);
 
-    document.getElementById('results-summary').innerHTML =
-      '<p>' + ok.length + '/' + models.length + ' completed for PR #' + review.prNumber + '</p>' +
-      (fail.length ? '<p class="error">Failed: ' + fail.join(', ') + '</p>' : '');
+    document.getElementById('results-summary').innerHTML = renderSummaryCard(review);
 
-    document.getElementById('results-detail').innerHTML = models.map(m => {
-      const r = review.results[m];
-      return '<details class="result-block"' + (r.success ? ' open' : '') + '>' +
-        '<summary>' + modelGlyphHtml(m) + m + (r.success ? ' ✓' : ' ✗') + ' — ' + (r.durationMs / 1000).toFixed(1) + 's</summary>' +
-        (r.success
-          ? '<pre>' + escapeHtml(r.output) + '</pre>'
-          : '<p class="error">' + escapeHtml(r.error || 'Error') + '</p>') +
-        '</details>';
-    }).join('');
+    var detailEl = document.getElementById('results-detail');
+    detailEl.innerHTML = '';
+    var hasFailed = false;
+
+    models.forEach(function(m) {
+      var r = review.results[m];
+      var block = document.createElement('div');
+      block.className = 'result-block';
+      var details = document.createElement('details');
+      if (r.success) details.open = true;
+      var summary = document.createElement('summary');
+      summary.innerHTML = modelGlyphHtml(m) + m + (r.success ? ' ✓' : ' ✗') + ' — ' + (r.durationMs / 1000).toFixed(1) + 's';
+      details.appendChild(summary);
+
+      if (r.success) {
+        var pre = document.createElement('pre');
+        pre.textContent = r.output;
+        details.appendChild(pre);
+      } else {
+        hasFailed = true;
+        var errP = document.createElement('p');
+        errP.className = 'error';
+        errP.textContent = r.error || 'Error';
+        details.appendChild(errP);
+        var retryBtn = document.createElement('button');
+        retryBtn.className = 'secondary';
+        retryBtn.textContent = 'Retry ' + m;
+        retryBtn.style.marginTop = '8px';
+        if (isViewingHistory) {
+          retryBtn.disabled = true;
+          retryBtn.title = 'Cannot retry from history — start a new review';
+        } else {
+          retryBtn.onclick = function() { vscode.postMessage({ type: 'retryModel', model: m }); };
+        }
+        details.appendChild(retryBtn);
+      }
+
+      block.appendChild(details);
+      detailEl.appendChild(block);
+    });
+
+    if (hasFailed) {
+      var retryAllBtn = document.createElement('button');
+      retryAllBtn.className = 'secondary';
+      retryAllBtn.textContent = 'Retry All Failed';
+      retryAllBtn.style.marginTop = '4px';
+      if (isViewingHistory) {
+        retryAllBtn.disabled = true;
+        retryAllBtn.title = 'Cannot retry from history — start a new review';
+      } else {
+        retryAllBtn.onclick = function() { vscode.postMessage({ type: 'retryAllFailed' }); };
+      }
+      detailEl.appendChild(retryAllBtn);
+    }
   }
 
   // ─── Grade tab ───
@@ -801,6 +1189,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     return '<svg width="' + w + '" height="' + h + '"><polyline points="' + pts + '" fill="none" stroke="' + c + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
   }
 
+  // ─── History ───
+  function renderHistory() {
+    var list = document.getElementById('history-list');
+    if (!reviewHistory.length) {
+      list.innerHTML = '<p class="empty-state">No past reviews.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    reviewHistory.forEach(function(r) {
+      var item = document.createElement('div');
+      item.className = 'history-item';
+      var titleSpan = document.createElement('span');
+      var prBadge = document.createElement('span');
+      prBadge.className = 'history-pr';
+      prBadge.textContent = '#' + r.prNumber;
+      titleSpan.appendChild(prBadge);
+      titleSpan.appendChild(document.createTextNode(' ' + r.prTitle.substring(0, 40)));
+      var dateSpan = document.createElement('span');
+      dateSpan.className = 'history-date';
+      dateSpan.textContent = new Date(r.timestamp).toLocaleDateString();
+      item.appendChild(titleSpan);
+      item.appendChild(dateSpan);
+      item.onclick = function() {
+        currentReview = r;
+        isViewingHistory = true;
+        renderResults(r);
+      };
+      list.appendChild(item);
+    });
+  }
+
   // ─── Message handler ───
   window.addEventListener('message', e => {
     const msg = e.data;
@@ -811,7 +1230,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         break;
       case 'reviewProgress': updateProgress(msg.model, msg.status); break;
       case 'reviewBytes': updateBytes(msg.model, msg.bytes); break;
-      case 'reviewComplete': stopElapsedTimer(); modelStartTimes = {}; currentReview = msg.review; renderResults(msg.review); break;
+      case 'reviewChunk': {
+        if (!chunkBuffers[msg.model]) chunkBuffers[msg.model] = '';
+        chunkBuffers[msg.model] += msg.text;
+        if (chunkBuffers[msg.model].length > 4096) {
+          chunkBuffers[msg.model] = chunkBuffers[msg.model].slice(-4096);
+        }
+        var preview = document.getElementById('chunks-' + msg.model);
+        if (preview) {
+          var lines = chunkBuffers[msg.model].split('\\n');
+          preview.textContent = lines.slice(-3).join('\\n');
+          preview.classList.add('active');
+        }
+        break;
+      }
+      case 'reviewComplete': stopElapsedTimer(); modelStartTimes = {}; isViewingHistory = false; currentReview = msg.review; renderResults(msg.review); break;
       case 'reviewError':
         stopElapsedTimer(); modelStartTimes = {};
         showState('select');
@@ -819,6 +1252,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         document.getElementById('pr-error').classList.remove('hidden');
         break;
       case 'leaderboard': renderLeaderboard(msg.stats); break;
+      case 'modelHealth':
+        Object.keys(msg.health).forEach(function(m) {
+          var dot = document.querySelector('.health-dot[data-model="' + m + '"]');
+          if (dot) {
+            dot.className = 'health-dot ' + (msg.health[m] ? 'available' : 'unavailable');
+            dot.title = msg.health[m] ? m + ' is available' : m + ' not found';
+          }
+        });
+        break;
+      case 'reviewHistory':
+        reviewHistory = msg.reviews;
+        renderHistory();
+        break;
       case 'error':
         showPrError(msg.message, 'Failed to load PRs');
         break;
