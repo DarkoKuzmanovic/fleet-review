@@ -88,6 +88,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.sendLeaderboard(msg.timeframe);
         break;
       case "retryModel":
+        if (!MODEL_NAMES.includes(msg.model)) {
+          this.post({ type: "error", message: `Invalid model: ${msg.model}` });
+          break;
+        }
         await this.retryModel(msg.model);
         break;
       case "retryAllFailed":
@@ -210,7 +214,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         health[model] = Config.nanoGptApiKey.length > 0;
       } else {
         try {
-          await execFileAsync("which", [model]);
+          await execFileAsync(process.platform === 'win32' ? 'where' : 'which', [model]);
           health[model] = true;
         } catch {
           health[model] = false;
@@ -221,25 +225,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.post({ type: "modelHealth", health });
   }
 
-  private async retryModel(model: ModelName): Promise<void> {
+  private async retryModelCore(model: ModelName): Promise<void> {
     if (!this.lastReview) {
-      this.post({ type: "error", message: "No review to retry" });
-      return;
+      throw new Error("No review to retry");
     }
 
-    try {
-      const updated = await this.orchestrator.retrySingleModel(
-        model,
-        this.lastReview,
-        (m, status) => this.post({ type: "reviewProgress", model: m, status }),
-        (m, bytes) => this.post({ type: "reviewBytes", model: m, bytes }),
-        (m) => new Promise<TimeoutDecision>((resolve) => {
-          this.pendingTimeouts.set(m, resolve);
-        }),
-      );
+    const updated = await this.orchestrator.retrySingleModel(
+      model,
+      this.lastReview,
+      (m, status) => this.post({ type: "reviewProgress", model: m, status }),
+      (m, bytes) => this.post({ type: "reviewBytes", model: m, bytes }),
+      (m) => new Promise<TimeoutDecision>((resolve) => {
+        this.pendingTimeouts.set(m, resolve);
+      }),
+      (m, text) => this.post({ type: "reviewChunk", model: m, text }),
+    );
 
-      this.lastReview = updated;
-      this.post({ type: "reviewComplete", review: updated });
+    this.lastReview = updated;
+  }
+
+  private async retryModel(model: ModelName): Promise<void> {
+    try {
+      await this.retryModelCore(model);
+      if (this.lastReview) {
+        this.post({ type: "reviewComplete", review: this.lastReview });
+      }
     } catch (err) {
       this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -257,8 +267,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       .filter(([, r]) => !r.success)
       .map(([m]) => m as ModelName);
 
-    for (const model of failedModels) {
-      await this.retryModel(model);
+    if (failedModels.length === 0) return;
+
+    try {
+      for (const model of failedModels) {
+        await this.retryModelCore(model);
+      }
+      if (this.lastReview) {
+        this.post({ type: "reviewComplete", review: this.lastReview });
+      }
+    } catch (err) {
+      this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      for (const resolve of this.pendingTimeouts.values()) {
+        resolve("kill");
+      }
+      this.pendingTimeouts.clear();
     }
   }
 
@@ -495,6 +519,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
   }
+  @keyframes entranceSlide {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .entrance { animation: entranceSlide 0.3s ease-out forwards; }
   .skeleton {
     background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
     background-size: 200% 100%;
@@ -690,6 +719,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   let prLoadTimer = null;
   var chunkBuffers = {};
   var reviewHistory = [];
+  var isViewingHistory = false;
 
   // ─── Tab switching ───
   document.querySelectorAll('.tabs button').forEach(btn => {
@@ -815,26 +845,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (!models.length || isNaN(prNumber)) return;
 
     showState('progress');
+    isViewingHistory = false;
     chunkBuffers = {};
     document.getElementById('progress-models').innerHTML = models.map(m =>
-      '<div class="model-row" id="progress-' + m + '">' +
-      '<span class="name"><span class="skeleton" style="display:inline-block;width:60px;height:14px;vertical-align:middle;"></span></span>' +
+      '<div class="model-row entrance" id="progress-' + m + '">' +
+      '<span class="progress-ring" id="ring-' + m + '"></span>' +
+      '<span class="name">' + modelGlyphHtml(m) + m + '</span>' +
       '<span class="elapsed"></span>' +
-      '<span class="skeleton" style="display:inline-block;width:52px;height:20px;border-radius:10px;"></span></div>'
+      '<span class="badge pending">pending</span>' +
+      '<pre class="chunk-preview" id="chunks-' + m + '"></pre>' +
+      '</div>'
     ).join('');
-
-    // Replace skeletons with real content after brief delay for visual continuity
-    setTimeout(function() {
-      models.forEach(function(m) {
-        var row = document.getElementById('progress-' + m);
-        if (!row) return;
-        row.innerHTML = '<span class="progress-ring" id="ring-' + m + '"></span>' +
-          '<span class="name">' + modelGlyphHtml(m) + m + '</span>' +
-          '<span class="elapsed"></span>' +
-          '<span class="badge pending">pending</span>' +
-          '<pre class="chunk-preview" id="chunks-' + m + '"></pre>';
-      });
-    }, 300);
 
     startElapsedTimer();
     vscode.postMessage({ type: 'startReview', models, prNumber });
@@ -1058,7 +1079,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         retryBtn.className = 'secondary';
         retryBtn.textContent = 'Retry ' + m;
         retryBtn.style.marginTop = '8px';
-        retryBtn.onclick = function() { vscode.postMessage({ type: 'retryModel', model: m }); };
+        if (isViewingHistory) {
+          retryBtn.disabled = true;
+          retryBtn.title = 'Cannot retry from history — start a new review';
+        } else {
+          retryBtn.onclick = function() { vscode.postMessage({ type: 'retryModel', model: m }); };
+        }
         details.appendChild(retryBtn);
       }
 
@@ -1071,7 +1097,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       retryAllBtn.className = 'secondary';
       retryAllBtn.textContent = 'Retry All Failed';
       retryAllBtn.style.marginTop = '4px';
-      retryAllBtn.onclick = function() { vscode.postMessage({ type: 'retryAllFailed' }); };
+      if (isViewingHistory) {
+        retryAllBtn.disabled = true;
+        retryAllBtn.title = 'Cannot retry from history — start a new review';
+      } else {
+        retryAllBtn.onclick = function() { vscode.postMessage({ type: 'retryAllFailed' }); };
+      }
       detailEl.appendChild(retryAllBtn);
     }
   }
@@ -1170,7 +1201,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       var item = document.createElement('div');
       item.className = 'history-item';
       var titleSpan = document.createElement('span');
-      titleSpan.innerHTML = '<span class="history-pr">#' + r.prNumber + '</span> ' + escapeHtml(r.prTitle.substring(0, 40));
+      var prBadge = document.createElement('span');
+      prBadge.className = 'history-pr';
+      prBadge.textContent = '#' + r.prNumber;
+      titleSpan.appendChild(prBadge);
+      titleSpan.appendChild(document.createTextNode(' ' + r.prTitle.substring(0, 40)));
       var dateSpan = document.createElement('span');
       dateSpan.className = 'history-date';
       dateSpan.textContent = new Date(r.timestamp).toLocaleDateString();
@@ -1178,6 +1213,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       item.appendChild(dateSpan);
       item.onclick = function() {
         currentReview = r;
+        isViewingHistory = true;
         renderResults(r);
       };
       list.appendChild(item);
@@ -1197,6 +1233,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       case 'reviewChunk': {
         if (!chunkBuffers[msg.model]) chunkBuffers[msg.model] = '';
         chunkBuffers[msg.model] += msg.text;
+        if (chunkBuffers[msg.model].length > 4096) {
+          chunkBuffers[msg.model] = chunkBuffers[msg.model].slice(-4096);
+        }
         var preview = document.getElementById('chunks-' + msg.model);
         if (preview) {
           var lines = chunkBuffers[msg.model].split('\\n');
@@ -1205,7 +1244,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         }
         break;
       }
-      case 'reviewComplete': stopElapsedTimer(); modelStartTimes = {}; currentReview = msg.review; renderResults(msg.review); break;
+      case 'reviewComplete': stopElapsedTimer(); modelStartTimes = {}; isViewingHistory = false; currentReview = msg.review; renderResults(msg.review); break;
       case 'reviewError':
         stopElapsedTimer(); modelStartTimes = {};
         showState('select');

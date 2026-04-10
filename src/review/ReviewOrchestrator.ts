@@ -190,14 +190,16 @@ export class ReviewOrchestrator {
     review: ReviewRecord,
     onProgress: (model: string, status: ModelStatus) => void,
     onBytes?: (model: string, bytes: number) => void,
-    onTimeout?: (model: string) => Promise<TimeoutDecision>
+    onTimeout?: (model: string) => Promise<TimeoutDecision>,
+    onText?: (model: string, text: string) => void
   ): Promise<ReviewRecord> {
     if (!this.lastPrompt) {
       throw new Error('No previous review prompt available for retry');
     }
 
-    this.abortController = new AbortController();
-    const { signal } = this.abortController;
+    const localController = new AbortController();
+    this.abortController = localController;
+    const { signal } = localController;
 
     onProgress(model, 'running');
     const startTime = Date.now();
@@ -215,7 +217,8 @@ export class ReviewOrchestrator {
       const result = await this.dispatcher.dispatch(
         model, this.lastPrompt,
         onBytes ? (bytes) => onBytes(model, bytes) : undefined,
-        signal, onModelTimeout, modelTimeoutMs
+        signal, onModelTimeout, modelTimeoutMs,
+        onText ? (text) => onText(model, text) : undefined
       );
       const durationMs = Date.now() - startTime;
 
@@ -250,7 +253,9 @@ export class ReviewOrchestrator {
       };
     }
 
-    this.abortController = null;
+    if (this.abortController === localController) {
+      this.abortController = null;
+    }
     this.store.saveReview(review);
     return review;
   }
