@@ -5,6 +5,33 @@ All notable changes to the Fleet Review extension will be documented in this fil
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-10
+
+### Added
+
+- Skeleton loading states with shimmer animation for PR dropdown, scores table, and progress rows
+- Review summary card showing completion stats, durations, GitHub post count, and output size
+- Timeout progress ring with color-coded conic-gradient (green → amber → red)
+- One-click retry for failed/timed-out models with per-model and bulk retry
+- Diff size warning banner when PR exceeds configurable line threshold
+- Model health check dots showing CLI availability (green/red) on model checkboxes
+- Streamed first findings — live preview of partial output during review
+- Review history drawer showing past reviews with clickable navigation
+- Smart model defaults — "Suggested" badge on models with high average scores
+- `fleetReview.diffSizeWarningThreshold` setting (default 1500 lines)
+
+### Fixed
+
+- Health check now uses `where` on Windows instead of Unix-only `which`
+- Model name validation prevents prototype pollution via crafted webview messages
+- Streaming preview now works during retry (missing `onText` callback wired through)
+- AbortController scoped locally in retry to prevent orphaning concurrent operations
+- "Retry All Failed" now fires a single `reviewComplete` instead of N full re-renders
+- Progress rows render real DOM immediately — removed 300ms skeleton race that dropped early updates
+- Stream chunk buffer capped to 4KB to prevent unbounded memory growth
+- History rendering uses `createElement`/`textContent` instead of `innerHTML`
+- Retry buttons disabled when viewing history items to prevent wrong-context corruption
+
 ## [0.1.2] - 2026-04-09
 
 ### Added

@@ -40,9 +40,10 @@ Then press **F5** in VS Code to launch the Extension Development Host.
 
 1. Open a project with a GitHub remote in VS Code
 2. Click the **Fleet Review** icon in the Activity Bar (sidebar)
-3. Select a PR and choose which models to run
-4. Click **Start Review** — models dispatch in parallel
-5. Results post to GitHub as each model finishes
+3. Select a PR and choose which models to run — health dots show CLI availability, and top-scoring models get a "Suggested" badge
+4. Click **Start Review** — models dispatch in parallel with progress rings and live streaming previews
+5. Results post to GitHub as each model finishes — failed models can be retried individually or in bulk
+6. Review past results from the history drawer at the bottom of the Review tab
 
 ### Commands
 
@@ -62,6 +63,7 @@ Then press **F5** in VS Code to launch the Extension Development Host.
 | `fleetReview.nanoGptApiKey` | `""` | Nano-GPT API key used by GLM reviews (falls back to `NANO_GPT_API_KEY`) |
 | `fleetReview.timeoutSeconds` | `300` | Timeout per model (seconds) |
 | `fleetReview.modelTimeouts` | `{}` | Per-model timeout overrides (seconds) for `claude`, `codex`, `gemini`, `qwen`, `copilot`, and `glm` |
+| `fleetReview.diffSizeWarningThreshold` | `1500` | Warn before reviewing PRs with more changed lines than this |
 | `fleetReview.dataDir` | `~/.config/fleet-review` | Directory for review data and scores |
 
 ## How scoring works

@@ -2,7 +2,7 @@
   "name": "fleet-review",
   "displayName": "Fleet Review",
   "description": "Multi-AI code review for GitHub PRs with model scoring",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "icon": "media/icon.png",
   "publisher": "darko-kuzmanovic",
   "license": "MIT",
