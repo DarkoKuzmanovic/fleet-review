@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -96,7 +97,7 @@ export class GitHubClient {
   }
 
   async postComment(repo: string, pr: number, body: string): Promise<void> {
-    const tmpFile = path.join(os.tmpdir(), `fleet-review-comment-${Date.now()}.md`);
+    const tmpFile = path.join(os.tmpdir(), `fleet-review-comment-${randomUUID()}.md`);
     try {
       fs.writeFileSync(tmpFile, body, "utf-8");
       await this.gh(["pr", "comment", String(pr), "--repo", repo, "--body-file", tmpFile]);
@@ -116,34 +117,37 @@ export class GitHubClient {
   ): Promise<number> {
     if (comments.length === 0) return 0;
 
-    // Create a pull request review with inline comments via gh api
-    const reviewBody = JSON.stringify({
-      body: '_Inline annotations via Fleet Review_',
-      event: 'COMMENT',
-      comments: comments.map((c) => ({
-        path: c.path,
-        line: c.line,
-        body: c.body,
-      })),
-    });
+    // Post each comment as an individual single-comment review so one
+    // invalid line number doesn't cause the entire batch to fail (the
+    // GitHub API rejects the whole request if any comment targets a
+    // line that isn't part of the diff).
+    let posted = 0;
+    for (const c of comments) {
+      const reviewBody = JSON.stringify({
+        body: '',
+        event: 'COMMENT',
+        comments: [{ path: c.path, line: c.line, side: 'RIGHT', body: c.body }],
+      });
 
-    const tmpFile = path.join(os.tmpdir(), `fleet-review-review-${Date.now()}.json`);
-    try {
-      fs.writeFileSync(tmpFile, reviewBody, 'utf-8');
-      await this.gh([
-        'api',
-        '--method', 'POST',
-        `/repos/${repo}/pulls/${pr}/reviews`,
-        '--input', tmpFile,
-      ]);
-      this.log(`Posted ${comments.length} inline comment(s) to PR #${pr}`);
-      return comments.length;
-    } catch (err) {
-      this.log(`Failed to post inline comments: ${err instanceof Error ? err.message : err}`);
-      return 0;
-    } finally {
-      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+      const tmpFile = path.join(os.tmpdir(), `fleet-review-review-${randomUUID()}.json`);
+      try {
+        fs.writeFileSync(tmpFile, reviewBody, 'utf-8');
+        await this.gh([
+          'api',
+          '--method', 'POST',
+          `/repos/${repo}/pulls/${pr}/reviews`,
+          '--input', tmpFile,
+        ]);
+        posted++;
+      } catch (err) {
+        this.log(`Skipped inline comment on ${c.path}:${c.line}: ${err instanceof Error ? err.message : err}`);
+      } finally {
+        try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+      }
     }
+
+    this.log(`Posted ${posted}/${comments.length} inline comment(s) to PR #${pr}`);
+    return posted;
   }
 
   async getAuditComments(repo: string, pr: number): Promise<Array<{ model: string; body: string }>> {

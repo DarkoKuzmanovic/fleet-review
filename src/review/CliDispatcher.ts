@@ -100,7 +100,7 @@ export class CliDispatcher {
           // fall through to abort
         }
       }
-      timeoutController.abort();
+      if (!settled) timeoutController.abort();
     };
 
     // Abort if the caller's signal fires
@@ -109,6 +109,7 @@ export class CliDispatcher {
 
     try {
       this.log('GLM: POST https://nano-gpt.com/api/v1/chat/completions (stream)');
+      startTimer(); // Start before fetch so DNS/TLS/connect stalls are covered
       const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -124,12 +125,13 @@ export class CliDispatcher {
       });
 
       if (!response.ok) {
+        clearTimeout(timer);
         const errorBody = await response.text().catch(() => '');
         this.log(`GLM: HTTP ${response.status} — ${errorBody.substring(0, 200)}`);
         return { stdout: '', stderr: `Nano-GPT API error ${response.status}: ${errorBody}`, exitCode: 1 };
       }
 
-      startTimer();
+      startTimer(); // Reset timer now that headers have arrived
 
       let stdout = '';
 
@@ -147,33 +149,33 @@ export class CliDispatcher {
           buffer = lines.pop() ?? '';
 
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-            const payload = trimmed.slice(6);
-            if (payload === '[DONE]') continue;
-
-            try {
-              const chunk = JSON.parse(payload) as {
-                choices?: Array<{ delta?: { content?: string } }>;
-                usage?: { prompt_tokens?: number; completion_tokens?: number };
-              };
-              const delta = chunk.choices?.[0]?.delta?.content ?? '';
-              if (delta) {
-                stdout += delta;
-                const deltaBytes = Buffer.byteLength(delta, 'utf-8');
-                totalBytes += deltaBytes;
-                bytesSinceLastCheck += deltaBytes;
-                if (onBytes) onBytes(totalBytes);
-                if (onText) onText(delta);
-              }
-              if (chunk.usage) {
-                promptTokens = chunk.usage.prompt_tokens ?? 0;
-                completionTokens = chunk.usage.completion_tokens ?? 0;
-              }
-            } catch {
-              // skip malformed SSE chunks
-            }
+            this.processSseLine(line, (delta) => {
+              stdout += delta;
+              const deltaBytes = Buffer.byteLength(delta, 'utf-8');
+              totalBytes += deltaBytes;
+              bytesSinceLastCheck += deltaBytes;
+              if (onBytes) onBytes(totalBytes);
+              if (onText) onText(delta);
+            }, (usage) => {
+              promptTokens = usage.prompt_tokens ?? 0;
+              completionTokens = usage.completion_tokens ?? 0;
+            });
           }
+        }
+
+        // Flush any trailing data left in the buffer after the stream ends
+        const remaining = decoder.decode() + buffer;
+        if (remaining.trim()) {
+          this.processSseLine(remaining, (delta) => {
+            stdout += delta;
+            const deltaBytes = Buffer.byteLength(delta, 'utf-8');
+            totalBytes += deltaBytes;
+            if (onBytes) onBytes(totalBytes);
+            if (onText) onText(delta);
+          }, (usage) => {
+            promptTokens = usage.prompt_tokens ?? 0;
+            completionTokens = usage.completion_tokens ?? 0;
+          });
         }
       } else {
         // Fallback for environments without streaming body support
@@ -211,6 +213,29 @@ export class CliDispatcher {
       return { stdout: '', stderr: message, exitCode: 1 };
     } finally {
       signal?.removeEventListener('abort', onCallerAbort);
+    }
+  }
+
+  private processSseLine(
+    line: string,
+    onDelta: (text: string) => void,
+    onUsage: (usage: { prompt_tokens?: number; completion_tokens?: number }) => void,
+  ): void {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.startsWith('data: ')) return;
+    const payload = trimmed.slice(6);
+    if (payload === '[DONE]') return;
+
+    try {
+      const chunk = JSON.parse(payload) as {
+        choices?: Array<{ delta?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      const delta = chunk.choices?.[0]?.delta?.content ?? '';
+      if (delta) onDelta(delta);
+      if (chunk.usage) onUsage(chunk.usage);
+    } catch {
+      // skip malformed SSE chunks
     }
   }
 

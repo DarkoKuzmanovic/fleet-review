@@ -198,7 +198,7 @@ export class ReviewOrchestrator {
     prFiles: string[],
   ): Array<{ path: string; line: number; body: string }> {
     const comments: Array<{ path: string; line: number; body: string }> = [];
-    const prFileSet = new Set(prFiles);
+    const prFileSet = new Set(prFiles.map(f => f.replace(/^\.\//, '')));
 
     // Split output into finding blocks: #### [N]. Title ...
     const blocks = output.split(/(?=####\s*\[?\d+\]?\.?\s)/);
@@ -211,10 +211,10 @@ export class ReviewOrchestrator {
       if (!titleMatch) continue;
 
       // Extract file and line: **File:** `path/to/file` L<line>
-      const fileMatch = trimmed.match(/\*\*File:\*\*\s*`([^`]+)`\s*L(\d+)/);
+      const fileMatch = trimmed.match(/\*\*File:\*\*\s*`([^`]+)`\s*L?(\d+)/);
       if (!fileMatch) continue;
 
-      const filePath = fileMatch[1];
+      const filePath = fileMatch[1].replace(/^\.\//, '');
       const line = parseInt(fileMatch[2], 10);
       if (!line || line <= 0) continue;
 

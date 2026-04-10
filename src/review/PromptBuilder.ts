@@ -30,9 +30,13 @@ export class PromptBuilder {
         ? `This is a **${projectType}** project.${combinedHint ? " " + combinedHint : ""}\n\n`
         : "";
 
-    // Check for user-configured custom audit prompt
+    // Check for user-configured custom audit prompt.  Always append the
+    // output format section so inline-comment parsing and the comparison
+    // view keep working regardless of custom prompt content.
     const customPrompt = Config.getProjectPrompt(projectType);
-    const auditInstructions = customPrompt ?? AUDIT_INSTRUCTIONS;
+    const auditInstructions = customPrompt
+      ? `${customPrompt}\n\n${OUTPUT_FORMAT}`
+      : AUDIT_INSTRUCTIONS;
 
     const diffLines = diff.split("\n").length;
     const fileCount = pr.files.length;
@@ -97,17 +101,7 @@ const PROJECT_HINTS: Partial<Record<ProjectType, string>> = {
   ruby: "Watch for mass assignment, N+1 queries, unsafe metaprogramming, and missing strong parameters.",
 };
 
-const AUDIT_INSTRUCTIONS = `You are a senior code reviewer performing an independent audit of a GitHub pull request.
-
-## Review Categories
-
-1. **Bugs** — Logic errors, race conditions, null safety, off-by-one errors, incorrect assumptions
-2. **Security** — Injection, unsafe operations, data leaks, auth issues, OWASP top 10
-3. **Performance** — Unnecessary allocations, hot-path inefficiencies, missing caching, N+1 queries
-4. **Design** — Coupling, naming, abstraction quality, missing error handling, best practices
-5. **Tests** — Untested code paths, edge cases, assertion quality
-
-## Output Format
+const OUTPUT_FORMAT = `## Output Format
 
 For each finding:
 
@@ -125,6 +119,18 @@ At the end, provide a summary table:
 |---|-------|----------|----------|------|
 
 If the PR looks clean, say so — don't invent issues.`;
+
+const AUDIT_INSTRUCTIONS = `You are a senior code reviewer performing an independent audit of a GitHub pull request.
+
+## Review Categories
+
+1. **Bugs** — Logic errors, race conditions, null safety, off-by-one errors, incorrect assumptions
+2. **Security** — Injection, unsafe operations, data leaks, auth issues, OWASP top 10
+3. **Performance** — Unnecessary allocations, hot-path inefficiencies, missing caching, N+1 queries
+4. **Design** — Coupling, naming, abstraction quality, missing error handling, best practices
+5. **Tests** — Untested code paths, edge cases, assertion quality
+
+${OUTPUT_FORMAT}`;
 
 const MERGE_INSTRUCTIONS = `You are consolidating code audit results from independent AI reviewers for a single PR.
 

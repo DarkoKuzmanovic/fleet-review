@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clock no longer resets chunk preview during streaming — elapsed time and byte count render in separate DOM elements
 - Extended timeout progress ring now pulses red with a glow effect to visually distinguish "borrowed time" from normal progress
 - History list no longer overflows horizontally — CSS truncation with ellipsis replaces brittle `substring(0, 40)`
+- Inline PR comments now post individually — one invalid line number no longer silently drops the entire batch
+- GLM timeout now covers connection/DNS/TLS stalls — timer starts before `fetch()`, not after headers arrive
+- Custom `projectPrompts` no longer breaks inline comment and comparison parsing — output format section is always appended
+- GLM `handleTimeout` no longer calls `abort()` after the stream has already settled
+- Extended-timeout ring pulse animation (`.extended` class) is now removed when a model completes
+- Temp files in GitHubClient use `crypto.randomUUID()` instead of predictable `Date.now()` names
+- `parseInlineFindings` now normalizes file paths (strips leading `./`) and uses a more lenient line-number regex matching the webview parser
+- SSE stream parser now flushes the trailing buffer after the reader ends, preventing loss of the final chunk
+- Clipboard copy buttons now handle rejection (`.catch()`) instead of leaving unhandled promise rejections
+- Token count display uses `>=` instead of `>` for the 1000-token formatting threshold
 
 ## [0.2.0] - 2026-04-10
 

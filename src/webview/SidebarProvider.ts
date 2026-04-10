@@ -869,6 +869,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       navigator.clipboard.writeText(text).then(function() {
         document.getElementById('btn-copy-grade-prompt').textContent = 'Copied!';
         setTimeout(function() { document.getElementById('btn-copy-grade-prompt').textContent = 'Copy'; }, 1500);
+      }).catch(function() {
+        document.getElementById('btn-copy-grade-prompt').textContent = 'Failed';
+        setTimeout(function() { document.getElementById('btn-copy-grade-prompt').textContent = 'Copy'; }, 1500);
       });
     };
   }
@@ -1115,7 +1118,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       if (status === 'running' || status === 'timeout-pending') {
         ring.classList.add('active');
       } else {
-        ring.classList.remove('active');
+        ring.classList.remove('active', 'extended');
       }
     }
 
@@ -1188,7 +1191,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         '<div class="summary-value">' + totalKB.toFixed(1) + '</div>' +
         '<div class="summary-detail">KB total</div></div>' +
       (hasTokens ? '<div class="summary-stat"><div class="summary-label">Tokens</div>' +
-        '<div class="summary-value">' + (totalTokens > 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +
+        '<div class="summary-value">' + (totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +
         '<div class="summary-detail">' + totalPromptTokens + ' in / ' + totalCompletionTokens + ' out</div></div>' : '') +
     '</div>';
   }
@@ -1231,6 +1234,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         copyBtn.onclick = function() {
           navigator.clipboard.writeText(r.output).then(function() {
             copyBtn.textContent = 'Copied!';
+            setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1500);
+          }).catch(function() {
+            copyBtn.textContent = 'Failed';
             setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1500);
           });
         };
