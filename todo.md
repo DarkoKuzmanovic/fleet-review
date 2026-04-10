@@ -1,0 +1,6 @@
+- glm via doesn't show output as other models do
+- after extending 300s overlay the progress circle with darker red
+- make output collapsible and add a small subtle copy button on hover inside the text area, on upper right edge
+- instead of notification in VS Code to paste instructions to Claude Code for grading, leave a copy-able prompt at the bottom of the Review sidebar window
+- when we have stdout streamin kilobytes they the clock changing seconds clears the output until change happens. make them showing independently
+- horizontal scrollbar in history, remove
