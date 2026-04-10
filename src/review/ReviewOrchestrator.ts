@@ -18,6 +18,9 @@ import { ScoreStore } from '../scoring/ScoreStore';
 
 export class ReviewOrchestrator {
   private abortController: AbortController | null = null;
+  private lastPrompt = '';
+  private lastRepo = '';
+  private lastPrNumber = 0;
 
   constructor(
     private github: GitHubClient,
@@ -44,12 +47,16 @@ export class ReviewOrchestrator {
     projectType: ProjectType,
     onProgress: (model: string, status: ModelStatus) => void,
     onBytes?: (model: string, bytes: number) => void,
-    onTimeout?: (model: string) => Promise<TimeoutDecision>
+    onTimeout?: (model: string) => Promise<TimeoutDecision>,
+    onText?: (model: string, text: string) => void
   ): Promise<ReviewRecord> {
     this.abortController = new AbortController();
     const { signal } = this.abortController;
 
     const prompt = this.promptBuilder.buildAuditPrompt(pr, diff, projectType);
+    this.lastPrompt = prompt;
+    this.lastRepo = repo;
+    this.lastPrNumber = pr.number;
 
     // Dispatch all models in parallel
     const settled = await Promise.allSettled(
@@ -67,7 +74,7 @@ export class ReviewOrchestrator {
             return decision;
           } : undefined;
           const modelTimeoutMs = Config.timeoutMsForModel(model);
-          const result = await this.dispatcher.dispatch(model, prompt, onBytes ? (bytes) => onBytes(model, bytes) : undefined, signal, onModelTimeout, modelTimeoutMs);
+          const result = await this.dispatcher.dispatch(model, prompt, onBytes ? (bytes) => onBytes(model, bytes) : undefined, signal, onModelTimeout, modelTimeoutMs, onText ? (text) => onText(model, text) : undefined);
           const durationMs = Date.now() - startTime;
 
           const success = result.exitCode === 0 && result.stdout.trim().length > 0;
@@ -176,5 +183,75 @@ export class ReviewOrchestrator {
     this.store.saveReview(review);
 
     return result.stdout;
+  }
+
+  async retrySingleModel(
+    model: ModelName,
+    review: ReviewRecord,
+    onProgress: (model: string, status: ModelStatus) => void,
+    onBytes?: (model: string, bytes: number) => void,
+    onTimeout?: (model: string) => Promise<TimeoutDecision>
+  ): Promise<ReviewRecord> {
+    if (!this.lastPrompt) {
+      throw new Error('No previous review prompt available for retry');
+    }
+
+    this.abortController = new AbortController();
+    const { signal } = this.abortController;
+
+    onProgress(model, 'running');
+    const startTime = Date.now();
+
+    try {
+      const onModelTimeout = onTimeout ? async () => {
+        onProgress(model, 'timeout-pending');
+        const decision = await onTimeout(model);
+        if (decision === 'extend') {
+          onProgress(model, 'running');
+        }
+        return decision;
+      } : undefined;
+      const modelTimeoutMs = Config.timeoutMsForModel(model);
+      const result = await this.dispatcher.dispatch(
+        model, this.lastPrompt,
+        onBytes ? (bytes) => onBytes(model, bytes) : undefined,
+        signal, onModelTimeout, modelTimeoutMs
+      );
+      const durationMs = Date.now() - startTime;
+
+      const success = result.exitCode === 0 && result.stdout.trim().length > 0;
+      onProgress(model, success ? 'done' : 'failed');
+
+      let postedToGitHub = false;
+      if (success && !signal.aborted) {
+        try {
+          const comment = `## Audit by \`${model}\`\n\n${result.stdout}\n\n---\n_Automated audit via Fleet Review_`;
+          await this.github.postComment(this.lastRepo, this.lastPrNumber, comment);
+          postedToGitHub = true;
+        } catch {
+          // Comment posting is best-effort
+        }
+      }
+
+      review.results[model] = {
+        model, output: result.stdout, success,
+        error: success ? undefined : result.stderr || 'Empty output',
+        postedToGitHub, durationMs,
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+      const message = err instanceof Error ? err.message : String(err);
+      const status: ModelStatus = message.includes('timed out') ? 'timeout' : 'failed';
+      onProgress(model, status);
+
+      review.results[model] = {
+        model, output: '', success: false,
+        error: message, postedToGitHub: false, durationMs,
+      };
+    }
+
+    this.abortController = null;
+    this.store.saveReview(review);
+    return review;
   }
 }

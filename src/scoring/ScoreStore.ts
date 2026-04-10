@@ -83,6 +83,10 @@ export class ScoreStore {
     return reviews[reviews.length - 1];
   }
 
+  getRecentReviews(limit = 20): ReviewRecord[] {
+    return this.loadReviews().slice(-limit).reverse();
+  }
+
   // --- Scores ---
 
   saveScore(entry: ScoreEntry): void {

@@ -48,7 +48,7 @@
         {
           "id": "fleetReview",
           "title": "Fleet Review",
-          "icon": "$(preview)"
+          "icon": "media/icon.svg"
         }
       ]
     },
@@ -111,15 +111,38 @@
           "default": 300,
           "description": "Default timeout in seconds for each model's review. Can be overridden per model via modelTimeouts."
         },
+        "fleetReview.diffSizeWarningThreshold": {
+          "type": "number",
+          "default": 1500,
+          "description": "Warn before reviewing PRs with more changed lines than this threshold."
+        },
         "fleetReview.modelTimeouts": {
           "type": "object",
           "properties": {
-            "claude": { "type": "number", "description": "Timeout in seconds for Claude" },
-            "codex": { "type": "number", "description": "Timeout in seconds for Codex" },
-            "gemini": { "type": "number", "description": "Timeout in seconds for Gemini" },
-            "qwen": { "type": "number", "description": "Timeout in seconds for Qwen" },
-            "copilot": { "type": "number", "description": "Timeout in seconds for Copilot" },
-            "glm": { "type": "number", "description": "Timeout in seconds for GLM" }
+            "claude": {
+              "type": "number",
+              "description": "Timeout in seconds for Claude"
+            },
+            "codex": {
+              "type": "number",
+              "description": "Timeout in seconds for Codex"
+            },
+            "gemini": {
+              "type": "number",
+              "description": "Timeout in seconds for Gemini"
+            },
+            "qwen": {
+              "type": "number",
+              "description": "Timeout in seconds for Qwen"
+            },
+            "copilot": {
+              "type": "number",
+              "description": "Timeout in seconds for Copilot"
+            },
+            "glm": {
+              "type": "number",
+              "description": "Timeout in seconds for GLM"
+            }
           },
           "default": {},
           "description": "Per-model timeout overrides in seconds. Models not listed here use the default timeoutSeconds."
