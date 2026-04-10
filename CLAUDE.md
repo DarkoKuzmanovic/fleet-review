@@ -31,7 +31,8 @@ fleet-review/
 ├── package.json                  # Extension manifest (commands, views, settings)
 ├── tsconfig.json                 # Strict TypeScript, ES2022
 ├── webpack.config.js             # Bundles to dist/extension.js
-└── dist/                         # Built output
+├── dist/                         # Built output
+└── releases/                     # VSIX packages (gitignored)
 ```
 
 ## Architecture
@@ -64,6 +65,14 @@ npm install
 npm run compile          # production build
 npm run watch            # dev build with watch
 # Press F5 in VS Code to launch Extension Development Host
+```
+
+### Packaging VSIX
+
+Always build VSIX packages into the `releases/` directory (gitignored), not the project root:
+
+```bash
+npx @vscode/vsce package -o releases/fleet-review-<version>.vsix
 ```
 
 ## Extension Commands

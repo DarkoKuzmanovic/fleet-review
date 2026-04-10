@@ -64,6 +64,8 @@ Then press **F5** in VS Code to launch the Extension Development Host.
 | `fleetReview.timeoutSeconds` | `300` | Timeout per model (seconds) |
 | `fleetReview.modelTimeouts` | `{}` | Per-model timeout overrides (seconds) for `claude`, `codex`, `gemini`, `qwen`, `copilot`, and `glm` |
 | `fleetReview.diffSizeWarningThreshold` | `1500` | Warn before reviewing PRs with more changed lines than this |
+| `fleetReview.projectPrompts` | `{}` | Custom review prompts per project type — overrides default audit instructions while preserving the output format |
+| `fleetReview.projectHints` | `{}` | Extra hints appended per project type without replacing the full prompt |
 | `fleetReview.dataDir` | `~/.config/fleet-review` | Directory for review data and scores |
 
 ## How scoring works
