@@ -27,6 +27,7 @@ export interface CliResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+  tokenUsage?: { prompt: number; completion: number };
 }
 
 export type ProjectType =
@@ -46,6 +47,7 @@ export interface ModelResult {
   error?: string;
   postedToGitHub: boolean;
   durationMs: number;
+  tokenUsage?: { prompt: number; completion: number };
 }
 
 export interface ReviewRecord {
@@ -119,4 +121,5 @@ export type ExtensionMessage =
   | { type: 'gradesImported'; scores: ScoreEntry[] }
   | { type: 'error'; message: string }
   | { type: 'modelHealth'; health: Record<string, boolean> }
-  | { type: 'reviewChunk'; model: string; text: string };
+  | { type: 'reviewChunk'; model: string; text: string }
+  | { type: 'gradePromptReady'; prompt: string };

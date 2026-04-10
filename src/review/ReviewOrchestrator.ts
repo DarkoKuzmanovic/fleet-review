@@ -88,6 +88,12 @@ export class ReviewOrchestrator {
               const comment = `## Audit by \`${model}\`\n\n${result.stdout}\n\n---\n_Automated audit via Fleet Review_`;
               await this.github.postComment(repo, pr.number, comment);
               postedToGitHub = true;
+
+              // Post inline comments for findings with file:line references
+              const inlineComments = ReviewOrchestrator.parseInlineFindings(result.stdout, model, pr.files);
+              if (inlineComments.length > 0) {
+                await this.github.postInlineComments(repo, pr.number, inlineComments);
+              }
             } catch {
               // Comment posting is best-effort
             }
@@ -100,6 +106,7 @@ export class ReviewOrchestrator {
             error: success ? undefined : result.stderr || 'Empty output',
             postedToGitHub,
             durationMs,
+            tokenUsage: result.tokenUsage,
           };
         } catch (err) {
           const durationMs = Date.now() - startTime;
@@ -185,6 +192,49 @@ export class ReviewOrchestrator {
     return result.stdout;
   }
 
+  static parseInlineFindings(
+    output: string,
+    model: string,
+    prFiles: string[],
+  ): Array<{ path: string; line: number; body: string }> {
+    const comments: Array<{ path: string; line: number; body: string }> = [];
+    const prFileSet = new Set(prFiles.map(f => f.replace(/^\.\//, '')));
+
+    // Split output into finding blocks: #### [N]. Title ...
+    const blocks = output.split(/(?=####\s*\[?\d+\]?\.?\s)/);
+    for (const block of blocks) {
+      const trimmed = block.trim();
+      if (!trimmed) continue;
+
+      // Extract title
+      const titleMatch = trimmed.match(/####\s*\[?\d+\]?\.?\s*(.+?)(?:\s*—|\n)/);
+      if (!titleMatch) continue;
+
+      // Extract file and line: **File:** `path/to/file` L<line>
+      const fileMatch = trimmed.match(/\*\*File:\*\*\s*`([^`]+)`\s*L?(\d+)/);
+      if (!fileMatch) continue;
+
+      const filePath = fileMatch[1].replace(/^\.\//, '');
+      const line = parseInt(fileMatch[2], 10);
+      if (!line || line <= 0) continue;
+
+      // Only post if the file is actually in this PR's changed files
+      if (!prFileSet.has(filePath)) continue;
+
+      // Extract issue description
+      const issueMatch = trimmed.match(/\*\*Issue:\*\*\s*(.+?)(?=\n\*\*|$)/s);
+      const issue = issueMatch ? issueMatch[1].trim() : titleMatch[1].trim();
+
+      comments.push({
+        path: filePath,
+        line,
+        body: `**\`${model}\`**: ${issue}`,
+      });
+    }
+
+    return comments;
+  }
+
   async retrySingleModel(
     model: ModelName,
     review: ReviewRecord,
@@ -240,6 +290,7 @@ export class ReviewOrchestrator {
         model, output: result.stdout, success,
         error: success ? undefined : result.stderr || 'Empty output',
         postedToGitHub, durationMs,
+        tokenUsage: result.tokenUsage,
       };
     } catch (err) {
       const durationMs = Date.now() - startTime;

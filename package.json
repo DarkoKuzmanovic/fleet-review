@@ -116,6 +116,34 @@
           "default": 1500,
           "description": "Warn before reviewing PRs with more changed lines than this threshold."
         },
+        "fleetReview.projectPrompts": {
+          "type": "object",
+          "properties": {
+            "node": { "type": "string", "description": "Custom audit prompt for Node.js projects" },
+            "rust": { "type": "string", "description": "Custom audit prompt for Rust projects" },
+            "go": { "type": "string", "description": "Custom audit prompt for Go projects" },
+            "python": { "type": "string", "description": "Custom audit prompt for Python projects" },
+            "jvm": { "type": "string", "description": "Custom audit prompt for JVM projects" },
+            "android": { "type": "string", "description": "Custom audit prompt for Android projects" },
+            "ruby": { "type": "string", "description": "Custom audit prompt for Ruby projects" }
+          },
+          "default": {},
+          "description": "Custom review prompts per project type. Overrides the default audit instructions for the detected project type. Use this to focus reviews on what matters most for your stack (e.g., memory safety for Rust, async handling for Node)."
+        },
+        "fleetReview.projectHints": {
+          "type": "object",
+          "properties": {
+            "node": { "type": "string", "description": "Extra hints appended for Node.js projects" },
+            "rust": { "type": "string", "description": "Extra hints appended for Rust projects" },
+            "go": { "type": "string", "description": "Extra hints appended for Go projects" },
+            "python": { "type": "string", "description": "Extra hints appended for Python projects" },
+            "jvm": { "type": "string", "description": "Extra hints appended for JVM projects" },
+            "android": { "type": "string", "description": "Extra hints appended for Android projects" },
+            "ruby": { "type": "string", "description": "Extra hints appended for Ruby projects" }
+          },
+          "default": {},
+          "description": "Extra hints appended to the default project-type hints. Use to add project-specific review focus areas without replacing the entire prompt."
+        },
         "fleetReview.modelTimeouts": {
           "type": "object",
           "properties": {

@@ -177,9 +177,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.store.writeLastReview(review);
-    vscode.window.showInformationMessage(
-      `Fleet Review: Review data written. Ask Claude Code to read ${this.store.lastReviewPath} and write grades to ${this.store.pendingScoresPath}`,
-    );
+
+    const models = Object.entries(review.results)
+      .filter(([, r]) => r.success)
+      .map(([m]) => m);
+
+    const prompt = [
+      `Read the review data from ${this.store.lastReviewPath}`,
+      ``,
+      `Grade each model (${models.join(', ')}) on a scale of 1-10 based on:`,
+      `- Accuracy of findings (are they real issues?)`,
+      `- Severity calibration (are severities appropriate?)`,
+      `- Actionability (are suggested fixes useful?)`,
+      `- Coverage (did it catch important issues?)`,
+      ``,
+      `Write your grades to ${this.store.pendingScoresPath} in this exact format:`,
+      `{`,
+      `  "reviewId": "<id from the review file>",`,
+      `  "scores": [`,
+      `    { "model": "<name>", "score": <1-10>, "feedback": "<one line>" }`,
+      `  ]`,
+      `}`,
+    ].join('\n');
+
+    this.post({ type: 'gradePromptReady', prompt });
   }
 
   private submitGrades(scores: Array<{ model: string; score: number; feedback: string }>): void {
@@ -400,8 +421,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   .model-row:hover { background: var(--list-hover); }
   .model-row + .model-row { border-top: 1px solid var(--border); }
   .model-row .name { font-weight: 500; }
-  .model-row .elapsed {
-    color: var(--desc-fg); font-size: 12px; margin-left: auto; margin-right: 10px;
+  .model-row .elapsed-time {
+    color: var(--desc-fg); font-size: 12px; margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .model-row .elapsed-bytes {
+    color: var(--desc-fg); font-size: 12px; margin-right: 10px; margin-left: 4px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -446,6 +471,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     max-height: 300px; overflow-y: auto; margin-top: 4px;
     border: 1px solid var(--border);
   }
+  .result-output-wrapper {
+    position: relative;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    width: auto; padding: 3px 8px; margin: 0; font-size: 11px;
+    background: var(--sec-btn-bg); color: var(--sec-btn-fg);
+    border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; opacity: 0; transition: opacity 0.15s;
+  }
+  .result-output-wrapper:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--btn-bg); color: var(--btn-fg); }
 
   .error { color: var(--vscode-errorForeground); font-size: 13px; margin: 8px 0; }
 
@@ -571,6 +608,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     mask: radial-gradient(circle, transparent 55%, black 56%);
   }
   .progress-ring.active { display: inline-block; }
+  @keyframes pulse-ring {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .progress-ring.extended {
+    animation: pulse-ring 1.5s ease-in-out infinite;
+    box-shadow: 0 0 4px var(--vscode-testing-iconFailed);
+  }
 
   /* ─── Chunk preview ─── */
   .chunk-preview {
@@ -598,15 +643,63 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   .suggested-badge.visible { display: inline-block; }
 
   /* ─── History list ─── */
-  .history-list { max-height: 240px; overflow-y: auto; }
+  .history-list { max-height: 240px; overflow-y: auto; overflow-x: hidden; min-width: 0; }
   .history-item {
     display: flex; justify-content: space-between; align-items: center;
     padding: 6px 8px; margin: 0 -8px; border-radius: 4px; cursor: pointer;
-    font-size: 12px; transition: background 0.1s;
+    font-size: 12px; transition: background 0.1s; min-width: 0;
   }
   .history-item:hover { background: var(--list-hover); }
+  .history-title {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0; flex: 1;
+  }
   .history-pr { font-weight: 500; }
-  .history-date { color: var(--desc-fg); font-size: 11px; white-space: nowrap; margin-left: 8px; }
+  .history-date { color: var(--desc-fg); font-size: 11px; white-space: nowrap; margin-left: 8px; flex-shrink: 0; }
+
+  /* ─── Comparison view ─── */
+  .compare-panel { margin-top: 12px; }
+  .compare-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  .compare-tabs button {
+    width: auto; flex: none; padding: 6px 12px; margin: 0; font-size: 12px;
+    background: transparent; color: var(--desc-fg); border: none;
+    border-bottom: 2px solid transparent; border-radius: 0; cursor: pointer;
+  }
+  .compare-tabs button:hover { color: var(--fg); background: transparent; }
+  .compare-tabs button.active {
+    color: var(--fg); font-weight: 500; border-bottom-color: var(--btn-bg); background: transparent;
+  }
+  .compare-content pre {
+    background: var(--input-bg); padding: 12px; border-radius: 4px;
+    overflow-x: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+    max-height: 400px; overflow-y: auto; border: 1px solid var(--border);
+  }
+  .compare-model-header {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px;
+  }
+  .compare-model-header .score-badge {
+    padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 600;
+  }
+  .finding-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px;
+    font-weight: 600; margin-right: 4px; margin-bottom: 2px;
+  }
+  .finding-tag.consensus { background: var(--vscode-testing-iconPassed); color: #fff; }
+  .finding-tag.unique { background: var(--vscode-editorWarning-foreground); color: #fff; }
+  .consensus-summary { margin-bottom: 12px; }
+  .consensus-summary h3 {
+    font-size: 12px; font-weight: 600; margin: 8px 0 4px; color: var(--fg);
+  }
+  .consensus-item {
+    padding: 4px 8px; font-size: 12px; border-left: 3px solid var(--vscode-testing-iconPassed);
+    margin-bottom: 4px; background: rgba(255,255,255,0.02); border-radius: 0 4px 4px 0;
+  }
+  .unique-item {
+    padding: 4px 8px; font-size: 12px; border-left: 3px solid var(--vscode-editorWarning-foreground);
+    margin-bottom: 4px; background: rgba(255,255,255,0.02); border-radius: 0 4px 4px 0;
+  }
 
   .warning-banner {
     padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 12px;
@@ -667,6 +760,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     <h2>Results</h2>
     <div id="results-summary"></div>
     <div id="results-detail"></div>
+    <button id="btn-compare" class="secondary">Compare Models</button>
+    <div id="compare-panel" class="compare-panel hidden"></div>
     <button id="btn-new-review" class="secondary">New Review</button>
   </div>
 </div>
@@ -682,6 +777,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     <button id="btn-submit-grades">Submit Grades</button>
     <button id="btn-grade-claude" class="secondary">Grade with Claude Code</button>
     <div id="grade-success" class="hidden" style="color:var(--vscode-testing-iconPassed); margin-top:8px; font-size:13px;"></div>
+    <div id="grade-prompt-block" class="hidden" style="margin-top:12px;">
+      <h2>Claude Code Prompt</h2>
+      <div class="result-output-wrapper">
+        <pre id="grade-prompt-text" style="max-height:200px;"></pre>
+        <button class="copy-btn" id="btn-copy-grade-prompt">Copy</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -749,8 +851,29 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     document.getElementById('btn-refresh').onclick = requestPRs;
     document.getElementById('btn-cancel').onclick = () => vscode.postMessage({ type: 'cancelReview' });
     document.getElementById('btn-new-review').onclick = resetToSelect;
+    document.getElementById('btn-compare').onclick = function() {
+      var panel = document.getElementById('compare-panel');
+      if (panel.classList.contains('hidden')) {
+        if (currentReview) buildComparison(currentReview);
+        panel.classList.remove('hidden');
+        document.getElementById('btn-compare').textContent = 'Hide Comparison';
+      } else {
+        panel.classList.add('hidden');
+        document.getElementById('btn-compare').textContent = 'Compare Models';
+      }
+    };
     document.getElementById('btn-submit-grades').onclick = submitGrades;
     document.getElementById('btn-grade-claude').onclick = () => vscode.postMessage({ type: 'gradeWithClaude' });
+    document.getElementById('btn-copy-grade-prompt').onclick = function() {
+      var text = document.getElementById('grade-prompt-text').textContent || '';
+      navigator.clipboard.writeText(text).then(function() {
+        document.getElementById('btn-copy-grade-prompt').textContent = 'Copied!';
+        setTimeout(function() { document.getElementById('btn-copy-grade-prompt').textContent = 'Copy'; }, 1500);
+      }).catch(function() {
+        document.getElementById('btn-copy-grade-prompt').textContent = 'Failed';
+        setTimeout(function() { document.getElementById('btn-copy-grade-prompt').textContent = 'Copy'; }, 1500);
+      });
+    };
   }
 
   function clearPrLoadTimer() {
@@ -851,7 +974,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       '<div class="model-row entrance" id="progress-' + m + '">' +
       '<span class="progress-ring" id="ring-' + m + '"></span>' +
       '<span class="name">' + modelGlyphHtml(m) + m + '</span>' +
-      '<span class="elapsed"></span>' +
+      '<span class="elapsed-time"></span>' +
+      '<span class="elapsed-bytes"></span>' +
       '<span class="badge pending">pending</span>' +
       '<pre class="chunk-preview" id="chunks-' + m + '"></pre>' +
       '</div>'
@@ -928,20 +1052,29 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       var info = modelStartTimes[model];
       if (!info.ended) {
         anyRunning = true;
-        var el = document.querySelector('#progress-' + model + ' .elapsed');
+        var el = document.querySelector('#progress-' + model + ' .elapsed-time');
         if (el) el.textContent = fmtElapsed(now - info.start);
 
         // Update progress ring
         var ring = document.getElementById('ring-' + model);
         if (ring) {
           var timeout = (MODEL_TIMEOUTS[model] ?? TIMEOUT_SEC) * 1000;
-          var elapsed = now - info.start;
-          var pct = Math.min(elapsed / timeout, 1);
-          var deg = Math.round(pct * 360);
-          var color = pct < 0.7 ? 'var(--vscode-testing-iconPassed)'
-            : pct < 0.9 ? 'var(--vscode-editorWarning-foreground)'
-            : 'var(--vscode-testing-iconFailed)';
-          ring.style.background = 'conic-gradient(' + color + ' 0deg, ' + color + ' ' + deg + 'deg, transparent ' + deg + 'deg)';
+          if (info.extended) {
+            // Extended run — ring restarts from extend point, always red with pulse
+            var extElapsed = now - (info.extendedAt || info.start);
+            var extPct = Math.min(extElapsed / timeout, 1);
+            var extDeg = Math.round(extPct * 360);
+            var extColor = 'var(--vscode-testing-iconFailed)';
+            ring.style.background = 'conic-gradient(' + extColor + ' 0deg, ' + extColor + ' ' + extDeg + 'deg, rgba(255,60,60,0.2) ' + extDeg + 'deg)';
+          } else {
+            var elapsed = now - info.start;
+            var pct = Math.min(elapsed / timeout, 1);
+            var deg = Math.round(pct * 360);
+            var color = pct < 0.7 ? 'var(--vscode-testing-iconPassed)'
+              : pct < 0.9 ? 'var(--vscode-editorWarning-foreground)'
+              : 'var(--vscode-testing-iconFailed)';
+            ring.style.background = 'conic-gradient(' + color + ' 0deg, ' + color + ' ' + deg + 'deg, transparent ' + deg + 'deg)';
+          }
         }
       }
     });
@@ -985,16 +1118,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       if (status === 'running' || status === 'timeout-pending') {
         ring.classList.add('active');
       } else {
-        ring.classList.remove('active');
+        ring.classList.remove('active', 'extended');
       }
     }
 
     if (status === 'running' && !modelStartTimes[model]) {
-      modelStartTimes[model] = { start: Date.now(), ended: false };
+      modelStartTimes[model] = { start: Date.now(), ended: false, extended: false };
     }
     if (status === 'running' && modelStartTimes[model] && modelStartTimes[model].ended) {
-      // Resumed after extend — restart timer
+      // Resumed after extend — mark as extended and reset ring
       modelStartTimes[model].ended = false;
+      modelStartTimes[model].extended = true;
+      modelStartTimes[model].extendedAt = Date.now();
+      var extRing = document.getElementById('ring-' + model);
+      if (extRing) extRing.classList.add('extended');
       if (!elapsedTimerId) startElapsedTimer();
     }
     if (status === 'done' || status === 'failed' || status === 'timeout') {
@@ -1008,11 +1145,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   function updateBytes(model, bytes) {
-    var el = document.querySelector('#progress-' + model + ' .elapsed');
+    var el = document.querySelector('#progress-' + model + ' .elapsed-bytes');
     if (!el || !modelStartTimes[model] || modelStartTimes[model].ended) return;
-    var now = Date.now();
-    var time = fmtElapsed(now - modelStartTimes[model].start);
-    el.textContent = time + ' · ' + fmtBytes(bytes);
+    el.textContent = '· ' + fmtBytes(bytes);
   }
 
   function renderSummaryCard(review) {
@@ -1029,6 +1164,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     var statusDetail = ok.length + '/' + models.length + ' done';
     if (fail.length) statusDetail += ', ' + fail.length + ' failed';
 
+    // Aggregate token usage from API models
+    var totalPromptTokens = 0;
+    var totalCompletionTokens = 0;
+    models.forEach(function(m) {
+      var tu = review.results[m].tokenUsage;
+      if (tu) {
+        totalPromptTokens += tu.prompt;
+        totalCompletionTokens += tu.completion;
+      }
+    });
+    var hasTokens = totalPromptTokens > 0 || totalCompletionTokens > 0;
+    var totalTokens = totalPromptTokens + totalCompletionTokens;
+
     return '<div class="summary-card">' +
       '<div class="summary-stat"><div class="summary-label">Status</div>' +
         '<div class="summary-value">' + ok.length + '/' + models.length + '</div>' +
@@ -1042,6 +1190,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       '<div class="summary-stat"><div class="summary-label">Output</div>' +
         '<div class="summary-value">' + totalKB.toFixed(1) + '</div>' +
         '<div class="summary-detail">KB total</div></div>' +
+      (hasTokens ? '<div class="summary-stat"><div class="summary-label">Tokens</div>' +
+        '<div class="summary-value">' + (totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +
+        '<div class="summary-detail">' + totalPromptTokens + ' in / ' + totalCompletionTokens + ' out</div></div>' : '') +
     '</div>';
   }
 
@@ -1066,9 +1217,33 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       details.appendChild(summary);
 
       if (r.success) {
+        var outputKB = (r.output.length / 1024).toFixed(1);
+        var innerDetails = document.createElement('details');
+        innerDetails.open = true;
+        var innerSummary = document.createElement('summary');
+        innerSummary.textContent = 'Output (' + outputKB + ' KB)';
+        innerSummary.style.cssText = 'font-size:11px;color:var(--desc-fg);cursor:pointer;padding:4px 0;';
+        innerDetails.appendChild(innerSummary);
+        var wrapper = document.createElement('div');
+        wrapper.className = 'result-output-wrapper';
         var pre = document.createElement('pre');
         pre.textContent = r.output;
-        details.appendChild(pre);
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.textContent = 'Copy';
+        copyBtn.onclick = function() {
+          navigator.clipboard.writeText(r.output).then(function() {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1500);
+          }).catch(function() {
+            copyBtn.textContent = 'Failed';
+            setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1500);
+          });
+        };
+        wrapper.appendChild(pre);
+        wrapper.appendChild(copyBtn);
+        innerDetails.appendChild(wrapper);
+        details.appendChild(innerDetails);
       } else {
         hasFailed = true;
         var errP = document.createElement('p');
@@ -1105,6 +1280,145 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       }
       detailEl.appendChild(retryAllBtn);
     }
+  }
+
+  // ─── Comparison view ───
+  function parseFindings(output) {
+    var findings = [];
+    // Match the audit output format: #### [N]. [Title] — Severity: ...
+    var blocks = output.split(/(?=####\\s*\\[?\\d+\\]?\\.?)/);
+    for (var i = 0; i < blocks.length; i++) {
+      var block = blocks[i].trim();
+      if (!block) continue;
+      var titleMatch = block.match(/####\\s*\\[?(\\d+)\\]?\\.?\\s*(.+?)(?:\\s*—|$)/m);
+      var fileMatch = block.match(/\\*\\*File:\\*\\*\\s*\`([^\`]+)\`\\s*L?(\\d+)?/);
+      if (titleMatch) {
+        findings.push({
+          id: (titleMatch[1] || i).toString(),
+          title: titleMatch[2] ? titleMatch[2].trim() : 'Finding ' + i,
+          file: fileMatch ? fileMatch[1] : '',
+          line: fileMatch && fileMatch[2] ? parseInt(fileMatch[2]) : 0,
+          raw: block,
+        });
+      }
+    }
+    return findings;
+  }
+
+  function buildComparison(review) {
+    var panel = document.getElementById('compare-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    var models = Object.keys(review.results).filter(function(m) {
+      return review.results[m].success;
+    });
+    if (models.length < 2) {
+      panel.innerHTML = '<p class="empty-state">Need 2+ successful models to compare.</p>';
+      return;
+    }
+
+    // Parse findings per model
+    var modelFindings = {};
+    models.forEach(function(m) { modelFindings[m] = parseFindings(review.results[m].output); });
+
+    // Match findings across models by file+line proximity
+    var allFindings = [];
+    models.forEach(function(m) {
+      modelFindings[m].forEach(function(f) {
+        allFindings.push({ model: m, finding: f });
+      });
+    });
+
+    // Group by file reference (findings about the same file within 5 lines)
+    var groups = [];
+    var used = new Set();
+    for (var i = 0; i < allFindings.length; i++) {
+      if (used.has(i)) continue;
+      var group = [allFindings[i]];
+      used.add(i);
+      if (allFindings[i].finding.file) {
+        for (var j = i + 1; j < allFindings.length; j++) {
+          if (used.has(j)) continue;
+          if (allFindings[j].finding.file === allFindings[i].finding.file &&
+              allFindings[j].model !== allFindings[i].model &&
+              Math.abs(allFindings[j].finding.line - allFindings[i].finding.line) <= 5) {
+            group.push(allFindings[j]);
+            used.add(j);
+          }
+        }
+      }
+      groups.push(group);
+    }
+
+    // Build consensus summary
+    var consensus = groups.filter(function(g) { return g.length >= 2; });
+    var unique = groups.filter(function(g) { return g.length === 1; });
+
+    var summaryDiv = document.createElement('div');
+    summaryDiv.className = 'consensus-summary';
+
+    if (consensus.length > 0) {
+      var h3c = document.createElement('h3');
+      h3c.innerHTML = '<span class="finding-tag consensus">' + consensus.length + '</span> Consensus Issues';
+      summaryDiv.appendChild(h3c);
+      consensus.forEach(function(g) {
+        var item = document.createElement('div');
+        item.className = 'consensus-item';
+        var modelsInGroup = g.map(function(e) { return e.model; }).join(', ');
+        item.textContent = g[0].finding.title + ' (' + modelsInGroup + ')';
+        if (g[0].finding.file) item.textContent += ' — ' + g[0].finding.file;
+        summaryDiv.appendChild(item);
+      });
+    }
+
+    if (unique.length > 0) {
+      var h3u = document.createElement('h3');
+      h3u.innerHTML = '<span class="finding-tag unique">' + unique.length + '</span> Unique Findings';
+      summaryDiv.appendChild(h3u);
+      unique.forEach(function(g) {
+        var item = document.createElement('div');
+        item.className = 'unique-item';
+        item.textContent = g[0].finding.title + ' (only ' + g[0].model + ')';
+        if (g[0].finding.file) item.textContent += ' — ' + g[0].finding.file;
+        summaryDiv.appendChild(item);
+      });
+    }
+
+    panel.appendChild(summaryDiv);
+
+    // Tabbed model outputs
+    var tabBar = document.createElement('div');
+    tabBar.className = 'compare-tabs';
+    var contentDiv = document.createElement('div');
+    contentDiv.className = 'compare-content';
+
+    models.forEach(function(m, idx) {
+      var tab = document.createElement('button');
+      tab.textContent = m;
+      var stat = MODEL_STATS.find(function(s) { return s.model === m; });
+      if (stat) {
+        var avg = stat.avgScore.toFixed(1);
+        tab.textContent = m + ' (' + avg + ')';
+      }
+      if (idx === 0) tab.classList.add('active');
+      tab.onclick = function() {
+        tabBar.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
+        tab.classList.add('active');
+        contentDiv.querySelectorAll('pre').forEach(function(p) { p.classList.add('hidden'); });
+        document.getElementById('compare-output-' + m).classList.remove('hidden');
+      };
+      tabBar.appendChild(tab);
+
+      var pre = document.createElement('pre');
+      pre.id = 'compare-output-' + m;
+      pre.textContent = review.results[m].output;
+      if (idx !== 0) pre.classList.add('hidden');
+      contentDiv.appendChild(pre);
+    });
+
+    panel.appendChild(tabBar);
+    panel.appendChild(contentDiv);
   }
 
   // ─── Grade tab ───
@@ -1201,11 +1515,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       var item = document.createElement('div');
       item.className = 'history-item';
       var titleSpan = document.createElement('span');
+      titleSpan.className = 'history-title';
       var prBadge = document.createElement('span');
       prBadge.className = 'history-pr';
       prBadge.textContent = '#' + r.prNumber;
       titleSpan.appendChild(prBadge);
-      titleSpan.appendChild(document.createTextNode(' ' + r.prTitle.substring(0, 40)));
+      titleSpan.appendChild(document.createTextNode(' ' + r.prTitle));
       var dateSpan = document.createElement('span');
       dateSpan.className = 'history-date';
       dateSpan.textContent = new Date(r.timestamp).toLocaleDateString();
@@ -1265,6 +1580,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         reviewHistory = msg.reviews;
         renderHistory();
         break;
+      case 'gradePromptReady': {
+        var promptBlock = document.getElementById('grade-prompt-block');
+        var promptText = document.getElementById('grade-prompt-text');
+        if (promptBlock && promptText) {
+          promptText.textContent = msg.prompt;
+          promptBlock.classList.remove('hidden');
+        }
+        break;
+      }
       case 'error':
         showPrError(msg.message, 'Failed to load PRs');
         break;

@@ -5,6 +5,35 @@ All notable changes to the Fleet Review extension will be documented in this fil
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- GLM model now streams output via SSE — byte counters and chunk previews update live instead of all-at-once
+- Collapsible output blocks with copy button — each model's output is independently collapsible with a hover-to-reveal copy button
+- In-extension Claude Code grading prompt — renders a copy-able prompt block in the Grade tab instead of a disappearing notification
+- Review comparison view — "Compare Models" button shows consensus vs. unique findings across models with tabbed output
+- Inline PR review comments — findings with file:line references are posted as inline GitHub review comments at the correct position
+- Model cost tracking — token usage (prompt/completion) displayed in summary card for API-based models (GLM)
+- Configurable review prompts per project type via `fleetReview.projectPrompts` setting
+- Configurable extra hints per project type via `fleetReview.projectHints` setting
+
+### Fixed
+
+- Clock no longer resets chunk preview during streaming — elapsed time and byte count render in separate DOM elements
+- Extended timeout progress ring now pulses red with a glow effect to visually distinguish "borrowed time" from normal progress
+- History list no longer overflows horizontally — CSS truncation with ellipsis replaces brittle `substring(0, 40)`
+- Inline PR comments now post individually — one invalid line number no longer silently drops the entire batch
+- GLM timeout now covers connection/DNS/TLS stalls — timer starts before `fetch()`, not after headers arrive
+- Custom `projectPrompts` no longer breaks inline comment and comparison parsing — output format section is always appended
+- GLM `handleTimeout` no longer calls `abort()` after the stream has already settled
+- Extended-timeout ring pulse animation (`.extended` class) is now removed when a model completes
+- Temp files in GitHubClient use `crypto.randomUUID()` instead of predictable `Date.now()` names
+- `parseInlineFindings` now normalizes file paths (strips leading `./`) and uses a more lenient line-number regex matching the webview parser
+- SSE stream parser now flushes the trailing buffer after the reader ends, preventing loss of the final chunk
+- Clipboard copy buttons now handle rejection (`.catch()`) instead of leaving unhandled promise rejections
+- Token count display uses `>=` instead of `>` for the 1000-token formatting threshold
+
 ## [0.2.0] - 2026-04-10
 
 ### Added
