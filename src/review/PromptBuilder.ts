@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { PRDetail, ProjectType } from "../types";
+import { Config } from "../config";
 
 export class PromptBuilder {
   detectProjectType(workspaceRoot: string): ProjectType {
@@ -20,10 +21,18 @@ export class PromptBuilder {
   }
 
   buildAuditPrompt(pr: PRDetail, diff: string, projectType: ProjectType): string {
+    // Check for user-configured extra hints
+    const defaultHint = PROJECT_HINTS[projectType] ?? "";
+    const userHint = Config.getProjectHint(projectType) ?? "";
+    const combinedHint = [defaultHint, userHint].filter(Boolean).join(" ");
     const contextLine =
       projectType !== "unknown"
-        ? `This is a **${projectType}** project.${PROJECT_HINTS[projectType] ? " " + PROJECT_HINTS[projectType] : ""}\n\n`
+        ? `This is a **${projectType}** project.${combinedHint ? " " + combinedHint : ""}\n\n`
         : "";
+
+    // Check for user-configured custom audit prompt
+    const customPrompt = Config.getProjectPrompt(projectType);
+    const auditInstructions = customPrompt ?? AUDIT_INSTRUCTIONS;
 
     const diffLines = diff.split("\n").length;
     const fileCount = pr.files.length;
@@ -36,7 +45,7 @@ export class PromptBuilder {
         ? `### Files Changed\n\n${displayFiles.map((f) => "- `" + f + "`").join("\n")}${pr.files.length > maxFiles ? `\n\n_...and ${pr.files.length - maxFiles} more_` : ""}\n\n`
         : "";
 
-    return `${contextLine}${AUDIT_INSTRUCTIONS}
+    return `${contextLine}${auditInstructions}
 
 ## PR Under Review
 

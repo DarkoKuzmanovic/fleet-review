@@ -109,6 +109,43 @@ export class GitHubClient {
     }
   }
 
+  async postInlineComments(
+    repo: string,
+    pr: number,
+    comments: Array<{ path: string; line: number; body: string }>,
+  ): Promise<number> {
+    if (comments.length === 0) return 0;
+
+    // Create a pull request review with inline comments via gh api
+    const reviewBody = JSON.stringify({
+      body: '_Inline annotations via Fleet Review_',
+      event: 'COMMENT',
+      comments: comments.map((c) => ({
+        path: c.path,
+        line: c.line,
+        body: c.body,
+      })),
+    });
+
+    const tmpFile = path.join(os.tmpdir(), `fleet-review-review-${Date.now()}.json`);
+    try {
+      fs.writeFileSync(tmpFile, reviewBody, 'utf-8');
+      await this.gh([
+        'api',
+        '--method', 'POST',
+        `/repos/${repo}/pulls/${pr}/reviews`,
+        '--input', tmpFile,
+      ]);
+      this.log(`Posted ${comments.length} inline comment(s) to PR #${pr}`);
+      return comments.length;
+    } catch (err) {
+      this.log(`Failed to post inline comments: ${err instanceof Error ? err.message : err}`);
+      return 0;
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    }
+  }
+
   async getAuditComments(repo: string, pr: number): Promise<Array<{ model: string; body: string }>> {
     const json = await this.gh(["pr", "view", String(pr), "--repo", repo, "--json", "comments"]);
     const raw = JSON.parse(json);

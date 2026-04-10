@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 
-import { ModelName, MODEL_NAMES } from './types';
+import { ModelName, MODEL_NAMES, ProjectType } from './types';
 
 export class Config {
   static get defaultModels(): ModelName[] {
@@ -73,5 +73,19 @@ export class Config {
 
   static get workspaceRoot(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+
+  static getProjectPrompt(projectType: ProjectType): string | undefined {
+    const prompts = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<Record<string, string>>('projectPrompts', {});
+    return prompts[projectType] || undefined;
+  }
+
+  static getProjectHint(projectType: ProjectType): string | undefined {
+    const hints = vscode.workspace
+      .getConfiguration('fleetReview')
+      .get<Record<string, string>>('projectHints', {});
+    return hints[projectType] || undefined;
   }
 }

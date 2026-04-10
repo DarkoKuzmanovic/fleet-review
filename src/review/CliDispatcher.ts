@@ -27,7 +27,7 @@ export class CliDispatcher {
     this.log(`Dispatching ${model}`);
 
     if (model === 'glm') {
-      return this.httpDispatch(prompt, onBytes, signal, timeoutMs);
+      return this.httpDispatch(prompt, onBytes, signal, onTimeout, timeoutMs, onText);
     }
 
     const promptFile = await this.writeTempPrompt(model, prompt);
@@ -59,7 +59,9 @@ export class CliDispatcher {
     prompt: string,
     onBytes?: (bytes: number) => void,
     signal?: AbortSignal,
-    timeoutMs?: number
+    onTimeout?: () => Promise<TimeoutDecision>,
+    timeoutMs?: number,
+    onText?: (text: string) => void
   ): Promise<CliResult> {
     const apiKey = Config.nanoGptApiKey;
     if (!apiKey) {
@@ -68,14 +70,45 @@ export class CliDispatcher {
 
     const effectiveTimeout = timeoutMs ?? Config.timeoutMs;
     const timeoutController = new AbortController();
-    const timeout = setTimeout(() => timeoutController.abort(), effectiveTimeout);
+    let totalBytes = 0;
+    let bytesSinceLastCheck = 0;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let promptTokens = 0;
+    let completionTokens = 0;
 
-    // Abort if either the timeout or the caller's signal fires
+    const startTimer = () => {
+      clearTimeout(timer);
+      bytesSinceLastCheck = 0;
+      timer = setTimeout(() => handleTimeout(), effectiveTimeout);
+    };
+
+    const handleTimeout = async () => {
+      if (bytesSinceLastCheck > 0) {
+        startTimer();
+        return;
+      }
+      if (onTimeout) {
+        try {
+          const decision = await onTimeout();
+          if (settled) return;
+          if (decision === 'extend') {
+            startTimer();
+            return;
+          }
+        } catch {
+          // fall through to abort
+        }
+      }
+      timeoutController.abort();
+    };
+
+    // Abort if the caller's signal fires
     const onCallerAbort = () => timeoutController.abort();
     signal?.addEventListener('abort', onCallerAbort, { once: true });
 
     try {
-      this.log('GLM: POST https://nano-gpt.com/api/v1/chat/completions');
+      this.log('GLM: POST https://nano-gpt.com/api/v1/chat/completions (stream)');
       const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -85,6 +118,7 @@ export class CliDispatcher {
         body: JSON.stringify({
           model: 'zai-org/glm-5:thinking',
           messages: [{ role: 'user', content: prompt }],
+          stream: true,
         }),
         signal: timeoutController.signal,
       });
@@ -95,15 +129,79 @@ export class CliDispatcher {
         return { stdout: '', stderr: `Nano-GPT API error ${response.status}: ${errorBody}`, exitCode: 1 };
       }
 
-      const data = await response.json() as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const content = data.choices?.[0]?.message?.content ?? '';
-      this.log(`GLM: received ${content.length} chars`);
-      if (onBytes) onBytes(Buffer.byteLength(content, 'utf-8'));
+      startTimer();
 
-      return { stdout: content, stderr: '', exitCode: content.length > 0 ? 0 : 1 };
+      let stdout = '';
+
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            const payload = trimmed.slice(6);
+            if (payload === '[DONE]') continue;
+
+            try {
+              const chunk = JSON.parse(payload) as {
+                choices?: Array<{ delta?: { content?: string } }>;
+                usage?: { prompt_tokens?: number; completion_tokens?: number };
+              };
+              const delta = chunk.choices?.[0]?.delta?.content ?? '';
+              if (delta) {
+                stdout += delta;
+                const deltaBytes = Buffer.byteLength(delta, 'utf-8');
+                totalBytes += deltaBytes;
+                bytesSinceLastCheck += deltaBytes;
+                if (onBytes) onBytes(totalBytes);
+                if (onText) onText(delta);
+              }
+              if (chunk.usage) {
+                promptTokens = chunk.usage.prompt_tokens ?? 0;
+                completionTokens = chunk.usage.completion_tokens ?? 0;
+              }
+            } catch {
+              // skip malformed SSE chunks
+            }
+          }
+        }
+      } else {
+        // Fallback for environments without streaming body support
+        const data = await response.json() as {
+          choices?: Array<{ message?: { content?: string } }>;
+          usage?: { prompt_tokens?: number; completion_tokens?: number };
+        };
+        stdout = data.choices?.[0]?.message?.content ?? '';
+        totalBytes = Buffer.byteLength(stdout, 'utf-8');
+        if (onBytes) onBytes(totalBytes);
+        if (onText && stdout) onText(stdout);
+        if (data.usage) {
+          promptTokens = data.usage.prompt_tokens ?? 0;
+          completionTokens = data.usage.completion_tokens ?? 0;
+        }
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      this.log(`GLM: received ${stdout.length} chars, ${promptTokens}+${completionTokens} tokens`);
+
+      return {
+        stdout, stderr: '', exitCode: stdout.length > 0 ? 0 : 1,
+        tokenUsage: (promptTokens || completionTokens) ? { prompt: promptTokens, completion: completionTokens } : undefined,
+      };
     } catch (err) {
+      settled = true;
+      clearTimeout(timer);
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('abort')) {
         this.log('GLM: request aborted');
@@ -112,7 +210,6 @@ export class CliDispatcher {
       this.log(`GLM: error — ${message}`);
       return { stdout: '', stderr: message, exitCode: 1 };
     } finally {
-      clearTimeout(timeout);
       signal?.removeEventListener('abort', onCallerAbort);
     }
   }

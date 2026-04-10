@@ -5,6 +5,25 @@ All notable changes to the Fleet Review extension will be documented in this fil
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- GLM model now streams output via SSE — byte counters and chunk previews update live instead of all-at-once
+- Collapsible output blocks with copy button — each model's output is independently collapsible with a hover-to-reveal copy button
+- In-extension Claude Code grading prompt — renders a copy-able prompt block in the Grade tab instead of a disappearing notification
+- Review comparison view — "Compare Models" button shows consensus vs. unique findings across models with tabbed output
+- Inline PR review comments — findings with file:line references are posted as inline GitHub review comments at the correct position
+- Model cost tracking — token usage (prompt/completion) displayed in summary card for API-based models (GLM)
+- Configurable review prompts per project type via `fleetReview.projectPrompts` setting
+- Configurable extra hints per project type via `fleetReview.projectHints` setting
+
+### Fixed
+
+- Clock no longer resets chunk preview during streaming — elapsed time and byte count render in separate DOM elements
+- Extended timeout progress ring now pulses red with a glow effect to visually distinguish "borrowed time" from normal progress
+- History list no longer overflows horizontally — CSS truncation with ellipsis replaces brittle `substring(0, 40)`
+
 ## [0.2.0] - 2026-04-10
 
 ### Added
