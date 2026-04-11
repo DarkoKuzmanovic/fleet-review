@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-04-11
+
+### Fixed
+
+- GitHub comment posting failures now surface a warning notification and log to the output channel instead of being silently swallowed
+- Merge synthesis uses the first configured default model instead of hardcoded `'claude'`
+- GLM abort detection checks `signal.aborted` and `AbortError` name before falling back to string matching
+
 ## [0.3.1] - 2026-04-11
 
 ### Fixed

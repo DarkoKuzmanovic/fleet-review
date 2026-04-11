@@ -205,7 +205,8 @@ export class CliDispatcher {
       settled = true;
       clearTimeout(timer);
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('abort')) {
+      const isAbort = signal?.aborted || (err instanceof Error && err.name === 'AbortError') || message.includes('abort');
+      if (isAbort) {
         this.log('GLM: request aborted');
         throw new Error(signal?.aborted ? 'Review cancelled' : `glm timed out after ${effectiveTimeout / 1000}s`);
       }

@@ -94,8 +94,10 @@ export class ReviewOrchestrator {
               if (inlineComments.length > 0) {
                 await this.github.postInlineComments(repo, pr.number, inlineComments);
               }
-            } catch {
-              // Comment posting is best-effort
+            } catch (e) {
+              const errMsg = e instanceof Error ? e.message : String(e);
+              this.output?.appendLine(`Fleet Review: failed to post comment for ${model}: ${errMsg}`);
+              vscode.window.showWarningMessage(`Fleet Review: failed to post GitHub comment for ${model}`);
             }
           }
 
@@ -175,7 +177,8 @@ export class ReviewOrchestrator {
     }
 
     const mergePrompt = this.promptBuilder.buildMergePrompt(auditOutputs, diff);
-    const result = await this.dispatcher.dispatch('claude', mergePrompt);
+    const mergeModel = Config.defaultModels[0] ?? 'claude';
+    const result = await this.dispatcher.dispatch(mergeModel, mergePrompt);
 
     if (result.exitCode !== 0 || !result.stdout.trim()) {
       throw new Error(`Merge synthesis failed: ${result.stderr}`);
@@ -289,8 +292,10 @@ export class ReviewOrchestrator {
           const comment = `## Audit by \`${model}\`\n\n${result.stdout}\n\n---\n_Automated audit via Fleet Review_`;
           await this.github.postComment(this.lastRepo, this.lastPrNumber, comment);
           postedToGitHub = true;
-        } catch {
-          // Comment posting is best-effort
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          this.output?.appendLine(`Fleet Review: failed to post comment for ${model}: ${errMsg}`);
+          vscode.window.showWarningMessage(`Fleet Review: failed to post GitHub comment for ${model}`);
         }
       }
 
