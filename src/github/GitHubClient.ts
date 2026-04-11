@@ -45,7 +45,7 @@ export class GitHubClient {
       "--limit",
       "30",
     ]);
-    const raw = JSON.parse(json) as Array<{
+    let raw: Array<{
       number: number;
       title: string;
       author: { login: string };
@@ -54,6 +54,12 @@ export class GitHubClient {
       additions: number;
       deletions: number;
     }>;
+    try {
+      raw = JSON.parse(json);
+    } catch (e) {
+      const preview = json.length === 0 ? '<empty>' : json.slice(0, 200);
+      throw new Error(`Failed to parse GitHub CLI output in listPRs: ${preview}`, { cause: e });
+    }
     const prs = raw.map((pr) => ({
       number: pr.number,
       title: pr.title,
@@ -82,7 +88,13 @@ export class GitHubClient {
       "--json",
       "number,title,body,author,createdAt,headRefName,additions,deletions,files",
     ]);
-    const raw = JSON.parse(json);
+    let raw: any;
+    try {
+      raw = JSON.parse(json);
+    } catch (e) {
+      const preview = json.length === 0 ? '<empty>' : json.slice(0, 200);
+      throw new Error(`Failed to parse GitHub CLI output in getPRInfo: ${preview}`, { cause: e });
+    }
     return {
       number: raw.number,
       title: raw.title,
@@ -152,7 +164,13 @@ export class GitHubClient {
 
   async getAuditComments(repo: string, pr: number): Promise<Array<{ model: string; body: string }>> {
     const json = await this.gh(["pr", "view", String(pr), "--repo", repo, "--json", "comments"]);
-    const raw = JSON.parse(json);
+    let raw: any;
+    try {
+      raw = JSON.parse(json);
+    } catch (e) {
+      const preview = json.length === 0 ? '<empty>' : json.slice(0, 200);
+      throw new Error(`Failed to parse GitHub CLI output in getAuditComments: ${preview}`, { cause: e });
+    }
     const comments: Array<{ model: string; body: string }> = [];
     for (const c of raw.comments ?? []) {
       const match = (c.body as string).match(/^## Audit by `(\w+)`/);

@@ -12,7 +12,13 @@ export class GradingPanel {
     store: ScoreStore,
     review?: ReviewRecord
   ): GradingPanel {
-    const target = review ?? store.getLatestReview();
+    let target: ReviewRecord | undefined;
+    try {
+      target = review ?? store.getLatestReview();
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
     if (!target) {
       vscode.window.showWarningMessage('Fleet Review: No review to grade');
       throw new Error('No review to grade');
@@ -45,23 +51,27 @@ export class GradingPanel {
 
   private handleMessage(msg: WebviewMessage): void {
     if (msg.type === 'submitGrades') {
-      const entries: ScoreEntry[] = msg.scores.map((s) => ({
-        reviewId: this.review.id,
-        model: s.model,
-        score: s.score,
-        feedback: s.feedback,
-        gradedBy: 'user' as const,
-        timestamp: new Date().toISOString(),
-      }));
+      try {
+        const entries: ScoreEntry[] = msg.scores.map((s) => ({
+          reviewId: this.review.id,
+          model: s.model,
+          score: s.score,
+          feedback: s.feedback,
+          gradedBy: 'user' as const,
+          timestamp: new Date().toISOString(),
+        }));
 
-      this.store.saveScores(entries);
+        this.store.saveScores(entries);
 
-      vscode.window.showInformationMessage(
-        `Fleet Review: Grades saved for ${entries.length} models`
-      );
+        vscode.window.showInformationMessage(
+          `Fleet Review: Grades saved for ${entries.length} models`
+        );
 
-      const response: ExtensionMessage = { type: 'gradesImported', scores: entries };
-      this.panel.webview.postMessage(response);
+        const response: ExtensionMessage = { type: 'gradesImported', scores: entries };
+        this.panel.webview.postMessage(response);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 

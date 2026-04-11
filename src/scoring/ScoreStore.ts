@@ -69,8 +69,7 @@ export class ScoreStore {
         this.reviewsCache = [];
         return this.reviewsCache;
       }
-      console.warn(`Fleet Review: failed to read ${this.reviewsPath}: ${err}`);
-      return [];
+      throw new Error(`Failed to load ${this.reviewsPath}: ${err}`, { cause: err });
     }
   }
 
@@ -118,8 +117,7 @@ export class ScoreStore {
         this.scoresCache = [];
         return this.scoresCache;
       }
-      console.warn(`Fleet Review: failed to read ${this.scoresPath}: ${err}`);
-      return [];
+      throw new Error(`Failed to load ${this.scoresPath}: ${err}`, { cause: err });
     }
   }
 

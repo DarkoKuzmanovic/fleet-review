@@ -149,7 +149,11 @@ export class ReviewOrchestrator {
       results,
     };
 
-    this.store.saveReview(review);
+    try {
+      this.store.saveReview(review);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: failed to save review — ${err instanceof Error ? err.message : err}`);
+    }
     return review;
   }
 
@@ -187,7 +191,11 @@ export class ReviewOrchestrator {
 
     // Update review record
     review.mergedReport = result.stdout;
-    this.store.saveReview(review);
+    try {
+      this.store.saveReview(review);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: failed to save review — ${err instanceof Error ? err.message : err}`);
+    }
 
     return result.stdout;
   }
@@ -307,7 +315,11 @@ export class ReviewOrchestrator {
     if (this.abortController === localController) {
       this.abortController = null;
     }
-    this.store.saveReview(review);
+    try {
+      this.store.saveReview(review);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: failed to save review — ${err instanceof Error ? err.message : err}`);
+    }
     return review;
   }
 }

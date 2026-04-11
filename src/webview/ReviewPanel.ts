@@ -112,18 +112,22 @@ export class ReviewPanel {
   }
 
   private async gradeWithClaude(): Promise<void> {
-    const review = this.store.getLatestReview();
-    if (!review) {
-      vscode.window.showWarningMessage("Fleet Review: No review to grade");
-      return;
-    }
+    try {
+      const review = this.store.getLatestReview();
+      if (!review) {
+        vscode.window.showWarningMessage("Fleet Review: No review to grade");
+        return;
+      }
 
-    this.store.writeLastReview(review);
-    vscode.window.showInformationMessage(
-      `Fleet Review: Review data written to ${this.store.lastReviewPath}. ` +
-        "Open Claude Code and ask it to grade the review and write scores to " +
-        this.store.pendingScoresPath,
-    );
+      this.store.writeLastReview(review);
+      vscode.window.showInformationMessage(
+        `Fleet Review: Review data written to ${this.store.lastReviewPath}. ` +
+          "Open Claude Code and ask it to grade the review and write scores to " +
+          this.store.pendingScoresPath,
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private post(msg: ExtensionMessage): void {

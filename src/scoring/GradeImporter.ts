@@ -42,33 +42,37 @@ export class GradeImporter implements vscode.Disposable {
   private tryImport(): void {
     // Small delay to let the file finish writing
     setTimeout(() => {
-      this.store.invalidateCache();
-      const scores = this.store.readPendingScores();
-      if (!scores || scores.length === 0) {
-        return;
-      }
+      try {
+        this.store.invalidateCache();
+        const scores = this.store.readPendingScores();
+        if (!scores || scores.length === 0) {
+          return;
+        }
 
-      // Verify the review exists
-      const reviewId = scores[0].reviewId;
-      const review = this.store.getReview(reviewId);
-      if (!review) {
-        vscode.window.showWarningMessage(
-          `Fleet Review: pending scores reference unknown review ${reviewId}`
+        // Verify the review exists
+        const reviewId = scores[0].reviewId;
+        const review = this.store.getReview(reviewId);
+        if (!review) {
+          vscode.window.showWarningMessage(
+            `Fleet Review: pending scores reference unknown review ${reviewId}`
+          );
+          return;
+        }
+
+        // Import scores
+        this.store.saveScores(scores);
+        this.store.deletePendingScores();
+        this.onImportEmitter.fire(scores);
+
+        const summary = scores
+          .map((s) => `${s.model}=${s.score}`)
+          .join(', ');
+        vscode.window.showInformationMessage(
+          `Fleet Review: Claude Code grades imported (${summary})`
         );
-        return;
+      } catch (err) {
+        vscode.window.showErrorMessage(`Fleet Review: import failed — ${err instanceof Error ? err.message : err}`);
       }
-
-      // Import scores
-      this.store.saveScores(scores);
-      this.store.deletePendingScores();
-      this.onImportEmitter.fire(scores);
-
-      const summary = scores
-        .map((s) => `${s.model}=${s.score}`)
-        .join(', ');
-      vscode.window.showInformationMessage(
-        `Fleet Review: Claude Code grades imported (${summary})`
-      );
     }, 500);
   }
 

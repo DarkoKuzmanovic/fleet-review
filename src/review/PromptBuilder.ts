@@ -49,6 +49,9 @@ export class PromptBuilder {
         ? `### Files Changed\n\n${displayFiles.map((f) => "- `" + f + "`").join("\n")}${pr.files.length > maxFiles ? `\n\n_...and ${pr.files.length - maxFiles} more_` : ""}\n\n`
         : "";
 
+    const maxRun = (diff.match(/`{3,}/g) ?? []).reduce((max, m) => Math.max(max, m.length), 3);
+    const fence = '`'.repeat(maxRun + 1);
+
     return `${contextLine}${auditInstructions}
 
 ## PR Under Review
@@ -62,9 +65,9 @@ ${pr.body ? `### Description\n\n${pr.body}\n\n` : ""}${fileList}### Diff
 Lines prefixed with \`+\` are additions, \`-\` are removals. Focus your review on additions and modified logic.
 Skip lock files, generated code, and vendored dependencies.
 
-\`\`\`diff
+${fence}diff
 ${diff}
-\`\`\`
+${fence}
 `;
   }
 
@@ -74,6 +77,9 @@ ${diff}
       audits += `---\n## Audit by \`${model}\`\n\n${output}\n\n`;
     }
 
+    const maxRun = (diff.match(/`{3,}/g) ?? []).reduce((max, m) => Math.max(max, m.length), 3);
+    const fence = '`'.repeat(maxRun + 1);
+
     return `${MERGE_INSTRUCTIONS}
 
 ## Audit comments from reviewers
@@ -82,9 +88,9 @@ ${audits}
 
 ## PR Diff (for reference)
 
-\`\`\`diff
+${fence}diff
 ${diff}
-\`\`\`
+${fence}
 `;
   }
 }
