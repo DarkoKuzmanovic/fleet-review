@@ -21,9 +21,17 @@ fleet-review/
 │   │   └── GradeImporter.ts      # Watches pending-scores.json, validates, imports
 │   └── webview/
 │       ├── SidebarProvider.ts    # Main sidebar UI (3 tabs: Review, Grade, Scores)
-│       ├── ReviewPanel.ts        # Standalone webview panel (alternate to sidebar)
 │       ├── GradingPanel.ts       # Full-page grading with sliders + feedback
-│       └── LeaderboardPanel.ts   # Full-page leaderboard with sparklines
+│       ├── LeaderboardPanel.ts   # Full-page leaderboard with sparklines
+│       └── webviewUtils.ts       # Shared escapeHtml (TS fn + JS string constant)
+├── media/                        # Static assets loaded by webviews via URI
+│   ├── sidebar.css               # Sidebar styles (extracted from SidebarProvider.ts)
+│   └── sidebar.js                # Sidebar script (extracted from SidebarProvider.ts)
+├── test/                         # Vitest unit tests
+│   ├── CliDispatcher.test.ts
+│   ├── GitHubClient.test.ts
+│   ├── PromptBuilder.test.ts
+│   └── ScoreStore.test.ts
 ├── shell/                        # Original bash CLI tool
 │   ├── fleet-review              # Standalone bash script (independent of extension)
 │   ├── Makefile
@@ -64,6 +72,7 @@ Each model is invoked via `child_process.spawn()` in `CliDispatcher.ts`:
 npm install
 npm run compile          # production build
 npm run watch            # dev build with watch
+npm test                 # run unit tests (vitest)
 # Press F5 in VS Code to launch Extension Development Host
 ```
 
@@ -135,3 +144,5 @@ This project maintains a [CHANGELOG.md](CHANGELOG.md) following [Keep a Changelo
 - Extension uses `retainContextWhenHidden` for webview state persistence
 - The shell/ bash script is independent — the extension does NOT wrap or depend on it
 - GitHub operations use `gh` CLI (must be authenticated via `gh auth login`)
+- `GitHubClient` resolves workspace root dynamically via `Config.workspaceRoot` getter to handle workspace changes
+- `gh` is invoked with `GH_PROMPT_DISABLED=1` and pager disabled; PR pickers fail into an explicit timeout/error state instead of leaving the webview on `Loading PRs...`
