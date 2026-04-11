@@ -17,8 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Extracted sidebar CSS and JavaScript from `SidebarProvider.getHtml()` into `media/sidebar.css` and `media/sidebar.js`, reducing the method from ~1300 lines to ~120
-- Sidebar CSP now loads CSS from file (`style-src ${cspSource}`) instead of `'unsafe-inline'`
+- Sidebar CSP now loads CSS from file (`style-src ${cspSource} 'unsafe-inline'`) — `'unsafe-inline'` retained for inline `style` attributes used by progress rings and model glyphs
 - `GradingPanel` uses shared `ESCAPE_HTML_JS` and `escapeHtml` from `webviewUtils` instead of local duplicates
+
+### Fixed
+
+- Sidebar `style-src` CSP now includes `'unsafe-inline'` to avoid blocking inline `style` attributes on model glyphs and progress rings
+- `querySelector` calls for elapsed-time/bytes counters now use `getElementById` + child query to avoid CSS parsing issues with dotted model names
+- TypeScript-level `escapeHtml()` now escapes single quotes (`'` → `&#39;`) for defense-in-depth in single-quoted attribute contexts
+- `package-lock.json` version synced to match `package.json` at 0.4.0
 
 ### Removed
 

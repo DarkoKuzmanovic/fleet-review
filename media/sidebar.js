@@ -245,7 +245,8 @@
       var info = modelStartTimes[model];
       if (!info.ended) {
         anyRunning = true;
-        var el = document.querySelector('#progress-' + model + ' .elapsed-time');
+        var row = document.getElementById('progress-' + model);
+        var el = row ? row.querySelector('.elapsed-time') : null;
         if (el) el.textContent = fmtElapsed(now - info.start);
 
         // Update progress ring
@@ -338,7 +339,8 @@
   }
 
   function updateBytes(model, bytes) {
-    var el = document.querySelector('#progress-' + model + ' .elapsed-bytes');
+    var bRow = document.getElementById('progress-' + model);
+    var el = bRow ? bRow.querySelector('.elapsed-bytes') : null;
     if (!el || !modelStartTimes[model] || modelStartTimes[model].ended) return;
     el.textContent = '· ' + fmtBytes(bytes);
   }
