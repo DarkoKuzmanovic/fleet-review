@@ -288,11 +288,6 @@ export class CliDispatcher {
       });
       this.log(`Spawned ${command} with pid ${proc.pid}`);
 
-      proc.stderr.on('data', (chunk: Buffer) => {
-        const text = chunk.toString().trim();
-        if (text) this.log(`${command} stderr: ${text.substring(0, 200)}`);
-      });
-
       let stdout = '';
       let stderr = '';
       let settled = false;
@@ -357,7 +352,10 @@ export class CliDispatcher {
       });
 
       proc.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        const trimmed = text.trim();
+        if (trimmed) this.log(`${command} stderr: ${trimmed.substring(0, 200)}`);
       });
 
       proc.on('error', (err) => {

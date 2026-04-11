@@ -41,7 +41,7 @@ export class GradeImporter implements vscode.Disposable {
 
   private tryImport(): void {
     // Small delay to let the file finish writing
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         this.store.invalidateCache();
         const scores = this.store.readPendingScores();
@@ -60,7 +60,7 @@ export class GradeImporter implements vscode.Disposable {
         }
 
         // Import scores
-        this.store.saveScores(scores);
+        await this.store.saveScores(scores);
         this.store.deletePendingScores();
         this.onImportEmitter.fire(scores);
 

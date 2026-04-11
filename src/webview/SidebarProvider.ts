@@ -19,6 +19,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private lastReview: import("../types").ReviewRecord | null = null;
   private pendingTimeouts = new Map<string, (decision: TimeoutDecision) => void>();
 
+  private clearPendingTimeouts(): void {
+    for (const resolve of this.pendingTimeouts.values()) {
+      resolve("kill");
+    }
+    this.pendingTimeouts.clear();
+  }
+
   constructor(
     private extensionUri: vscode.Uri,
     private github: GitHubClient,
@@ -168,21 +175,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
-      for (const resolve of this.pendingTimeouts.values()) {
-        resolve("kill");
-      }
-      this.pendingTimeouts.clear();
+      this.clearPendingTimeouts();
     }
   }
 
-  private gradeWithClaude(): void {
+  private async gradeWithClaude(): Promise<void> {
     try {
       const review = this.store.getLatestReview();
       if (!review) {
         vscode.window.showWarningMessage("Fleet Review: No review to grade");
         return;
       }
-      this.store.writeLastReview(review);
+      await this.store.writeLastReview(review);
 
       const models = Object.entries(review.results)
         .filter(([, r]) => r.success)
@@ -212,7 +216,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private submitGrades(scores: Array<{ model: string; score: number; feedback: string }>): void {
+  private async submitGrades(scores: Array<{ model: string; score: number; feedback: string }>): Promise<void> {
     try {
       const review = this.store.getLatestReview();
       if (!review) return;
@@ -226,7 +230,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         timestamp: new Date().toISOString(),
       }));
 
-      this.store.saveScores(entries);
+      await this.store.saveScores(entries);
       vscode.window.showInformationMessage(`Fleet Review: Grades saved for ${entries.length} models`);
       this.post({ type: "gradesImported", scores: entries });
     } catch (err) {
@@ -291,10 +295,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     } catch (err) {
       this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
     } finally {
-      for (const resolve of this.pendingTimeouts.values()) {
-        resolve("kill");
-      }
-      this.pendingTimeouts.clear();
+      this.clearPendingTimeouts();
     }
   }
 
@@ -317,10 +318,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     } catch (err) {
       this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
     } finally {
-      for (const resolve of this.pendingTimeouts.values()) {
-        resolve("kill");
-      }
-      this.pendingTimeouts.clear();
+      this.clearPendingTimeouts();
     }
   }
 

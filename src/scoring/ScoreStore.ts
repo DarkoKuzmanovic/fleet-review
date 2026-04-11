@@ -43,7 +43,7 @@ export class ScoreStore {
 
   // --- Reviews ---
 
-  saveReview(review: ReviewRecord): void {
+  async saveReview(review: ReviewRecord): Promise<void> {
     this.ensureDir();
     const reviews = this.loadReviews();
     const idx = reviews.findIndex((r) => r.id === review.id);
@@ -52,7 +52,7 @@ export class ScoreStore {
     } else {
       reviews.push(review);
     }
-    fs.writeFileSync(this.reviewsPath, JSON.stringify(reviews, null, 2));
+    await fs.promises.writeFile(this.reviewsPath, JSON.stringify(reviews, null, 2));
     this.reviewsCache = reviews;
   }
 
@@ -88,19 +88,19 @@ export class ScoreStore {
 
   // --- Scores ---
 
-  saveScore(entry: ScoreEntry): void {
+  async saveScore(entry: ScoreEntry): Promise<void> {
     this.ensureDir();
     const scores = this.loadScores();
     scores.push(entry);
-    fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
+    await fs.promises.writeFile(this.scoresPath, JSON.stringify(scores, null, 2));
     this.scoresCache = scores;
   }
 
-  saveScores(entries: ScoreEntry[]): void {
+  async saveScores(entries: ScoreEntry[]): Promise<void> {
     this.ensureDir();
     const scores = this.loadScores();
     scores.push(...entries);
-    fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
+    await fs.promises.writeFile(this.scoresPath, JSON.stringify(scores, null, 2));
     this.scoresCache = scores;
   }
 
@@ -166,7 +166,7 @@ export class ScoreStore {
 
   // --- Last review for Claude Code grading ---
 
-  writeLastReview(review: ReviewRecord): void {
+  async writeLastReview(review: ReviewRecord): Promise<void> {
     this.ensureDir();
     const data = {
       reviewId: review.id,
@@ -179,7 +179,7 @@ export class ScoreStore {
           .map(([model, r]) => [model, { output: r.output }])
       ),
     };
-    fs.writeFileSync(this.lastReviewPath, JSON.stringify(data, null, 2));
+    await fs.promises.writeFile(this.lastReviewPath, JSON.stringify(data, null, 2));
   }
 
   // --- Pending scores from Claude Code ---

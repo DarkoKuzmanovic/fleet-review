@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-04-12
+
+### Changed
+
+- Merged duplicate `stderr` listeners into a single handler in `CliDispatcher` that both logs and accumulates
+- Extracted `clearPendingTimeouts()` helper in `SidebarProvider` to prevent Map leaks on review crash
+- Switched `writeFileSync` to `fs.promises.writeFile` in `ScoreStore` for non-blocking file I/O
+
+### Removed
+
+- Dead types `ReviewStatus` and `PendingScores` from `types.ts`
+
 ## [0.3.2] - 2026-04-11
 
 ### Fixed

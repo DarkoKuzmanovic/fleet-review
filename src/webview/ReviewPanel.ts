@@ -119,7 +119,7 @@ export class ReviewPanel {
         return;
       }
 
-      this.store.writeLastReview(review);
+      await this.store.writeLastReview(review);
       vscode.window.showInformationMessage(
         `Fleet Review: Review data written to ${this.store.lastReviewPath}. ` +
           "Open Claude Code and ask it to grade the review and write scores to " +

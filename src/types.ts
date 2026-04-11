@@ -6,7 +6,6 @@ export const API_MODELS: ReadonlySet<ModelName> = new Set(['glm']);
 export type ModelStatus = 'pending' | 'running' | 'done' | 'failed' | 'timeout' | 'timeout-pending';
 
 export type TimeoutDecision = 'extend' | 'kill';
-export type ReviewStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface PR {
   number: number;
@@ -77,15 +76,6 @@ export interface ModelStats {
   best: number;
   worst: number;
   recentScores: number[];
-}
-
-export interface PendingScores {
-  reviewId: string;
-  scores: Array<{
-    model: string;
-    score: number;
-    feedback: string;
-  }>;
 }
 
 export interface ProgressUpdate {
