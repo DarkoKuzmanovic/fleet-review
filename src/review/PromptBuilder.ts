@@ -62,9 +62,9 @@ ${pr.body ? `### Description\n\n${pr.body}\n\n` : ""}${fileList}### Diff
 Lines prefixed with \`+\` are additions, \`-\` are removals. Focus your review on additions and modified logic.
 Skip lock files, generated code, and vendored dependencies.
 
-\`\`\`diff
+\`\`\`\`diff
 ${diff}
-\`\`\`
+\`\`\`\`
 `;
   }
 
@@ -82,9 +82,9 @@ ${audits}
 
 ## PR Diff (for reference)
 
-\`\`\`diff
+\`\`\`\`diff
 ${diff}
-\`\`\`
+\`\`\`\`
 `;
   }
 }

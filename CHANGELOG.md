@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-11
+
+### Fixed
+
+- ScoreStore now re-throws non-ENOENT errors in `loadReviews()` and `loadScores()` instead of silently returning empty arrays on corrupted data
+- GitHubClient wraps `JSON.parse()` calls in `listPRs`, `getPRInfo`, and `getAuditComments` with descriptive error messages
+- PromptBuilder uses quadruple-backtick fences for diff blocks to prevent breakage when diffs contain triple backticks
+
 ## [0.3.0] - 2026-04-10
 
 ### Added
