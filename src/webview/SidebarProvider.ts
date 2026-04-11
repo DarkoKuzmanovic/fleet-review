@@ -87,10 +87,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;
         }
         case "gradeWithClaude":
-          this.gradeWithClaude();
+          await this.gradeWithClaude();
           break;
         case "submitGrades":
-          this.submitGrades(msg.scores);
+          await this.submitGrades(msg.scores);
           break;
         case "requestLeaderboard":
           this.sendLeaderboard(msg.timeframe);

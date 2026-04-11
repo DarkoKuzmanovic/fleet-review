@@ -9,6 +9,7 @@ export class GradeImporter implements vscode.Disposable {
   private watcher: fs.FSWatcher | null = null;
   private readonly onImportEmitter = new vscode.EventEmitter<ScoreEntry[]>();
   public readonly onImport = this.onImportEmitter.event;
+  private importing = false;
 
   constructor(private store: ScoreStore) {}
 
@@ -40,6 +41,8 @@ export class GradeImporter implements vscode.Disposable {
   }
 
   private tryImport(): void {
+    if (this.importing) return;
+    this.importing = true;
     // Small delay to let the file finish writing
     setTimeout(async () => {
       try {
@@ -72,6 +75,8 @@ export class GradeImporter implements vscode.Disposable {
         );
       } catch (err) {
         vscode.window.showErrorMessage(`Fleet Review: import failed — ${err instanceof Error ? err.message : err}`);
+      } finally {
+        this.importing = false;
       }
     }, 500);
   }
