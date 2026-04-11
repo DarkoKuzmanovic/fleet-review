@@ -34,6 +34,11 @@ export class ReviewOrchestrator {
     return this.abortController !== null;
   }
 
+  private logCommentFailure(model: string, err: unknown): void {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    this.output?.appendLine(`Fleet Review: failed to post comment for ${model}: ${errMsg}`);
+  }
+
   cancel(): void {
     this.abortController?.abort();
     this.abortController = null;
@@ -59,6 +64,7 @@ export class ReviewOrchestrator {
     this.lastPrNumber = pr.number;
 
     // Dispatch all models in parallel
+    const commentFailures: string[] = [];
     const settled = await Promise.allSettled(
       models.map(async (model): Promise<ModelResult> => {
         onProgress(model, 'running');
@@ -95,9 +101,8 @@ export class ReviewOrchestrator {
                 await this.github.postInlineComments(repo, pr.number, inlineComments);
               }
             } catch (e) {
-              const errMsg = e instanceof Error ? e.message : String(e);
-              this.output?.appendLine(`Fleet Review: failed to post comment for ${model}: ${errMsg}`);
-              vscode.window.showWarningMessage(`Fleet Review: failed to post GitHub comment for ${model}`);
+              this.logCommentFailure(model, e);
+              commentFailures.push(model);
             }
           }
 
@@ -129,6 +134,10 @@ export class ReviewOrchestrator {
         }
       })
     );
+
+    if (commentFailures.length > 0) {
+      vscode.window.showWarningMessage(`Fleet Review: failed to post GitHub comments for: ${commentFailures.join(', ')}`);
+    }
 
     // Collect results
     const results: Record<string, ModelResult> = {};
@@ -293,8 +302,7 @@ export class ReviewOrchestrator {
           await this.github.postComment(this.lastRepo, this.lastPrNumber, comment);
           postedToGitHub = true;
         } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          this.output?.appendLine(`Fleet Review: failed to post comment for ${model}: ${errMsg}`);
+          this.logCommentFailure(model, e);
           vscode.window.showWarningMessage(`Fleet Review: failed to post GitHub comment for ${model}`);
         }
       }
