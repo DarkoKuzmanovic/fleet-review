@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-12
+
+### Added
+
+- Unit test suite with vitest: 64 tests covering `PromptBuilder`, `ScoreStore`, `GitHubClient`, and `CliDispatcher`
+- Shared TypeScript-level `escapeHtml()` export in `webviewUtils.ts` for template-time HTML escaping
+
+### Changed
+
+- Extracted sidebar CSS and JavaScript from `SidebarProvider.getHtml()` into `media/sidebar.css` and `media/sidebar.js`, reducing the method from ~1300 lines to ~120
+- Sidebar CSP now loads CSS from file (`style-src ${cspSource}`) instead of `'unsafe-inline'`
+- `GradingPanel` uses shared `ESCAPE_HTML_JS` and `escapeHtml` from `webviewUtils` instead of local duplicates
+
+### Removed
+
+- `ReviewPanel` — unused standalone webview panel superseded by the sidebar; had no streaming, retry, grading, timeout, or comparison support
+
 ## [0.3.3] - 2026-04-12
 
 ### Fixed

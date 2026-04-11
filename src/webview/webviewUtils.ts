@@ -10,3 +10,8 @@ export const ESCAPE_HTML_JS = `
     d.textContent = s;
     return d.innerHTML;
   }`;
+
+/** TypeScript-level HTML escaping for use in template literals (extension host). */
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}

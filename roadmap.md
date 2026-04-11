@@ -74,7 +74,7 @@ Low-risk hygiene improvements.
 
 Feature-level improvements warranting a minor version bump.
 
-- [ ] Add unit tests for `PromptBuilder`, `ScoreStore`, `GitHubClient`, `CliDispatcher` (finding #13)
-- [ ] Deprecate `ReviewPanel` or bring to feature parity with sidebar (finding #18)
-- [ ] Extract webview JS/HTML from `SidebarProvider.getHtml()` into separate files (finding #14)
-- [ ] Deduplicate `escapeHtml` — use shared `ESCAPE_HTML_JS` everywhere (detail finding)
+- [x] Add unit tests for `PromptBuilder`, `ScoreStore`, `GitHubClient`, `CliDispatcher` (finding #13)
+- [x] Deprecate `ReviewPanel` or bring to feature parity with sidebar (finding #18)
+- [x] Extract webview JS/HTML from `SidebarProvider.getHtml()` into separate files (finding #14)
+- [x] Deduplicate `escapeHtml` — use shared `ESCAPE_HTML_JS` everywhere (detail finding)

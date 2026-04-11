@@ -1,0 +1,378 @@
+  :root {
+    --bg: var(--vscode-sideBar-background);
+    --fg: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground));
+    --border: var(--vscode-panel-border, rgba(255,255,255,0.07));
+    --btn-bg: var(--vscode-button-background);
+    --btn-fg: var(--vscode-button-foreground);
+    --btn-hover: var(--vscode-button-hoverBackground);
+    --input-bg: var(--vscode-input-background);
+    --input-fg: var(--vscode-input-foreground);
+    --input-border: var(--vscode-input-border, transparent);
+    --sec-btn-bg: var(--vscode-button-secondaryBackground);
+    --sec-btn-fg: var(--vscode-button-secondaryForeground);
+    --list-hover: var(--vscode-list-hoverBackground);
+    --focus-border: var(--vscode-focusBorder);
+    --desc-fg: var(--vscode-descriptionForeground);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--vscode-font-family); color: var(--fg); background: var(--bg);
+    padding: 0; font-size: 13px; line-height: 1.4;
+  }
+
+  h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--desc-fg); margin: 16px 0 8px; padding: 0;
+  }
+  h2:first-child { margin-top: 4px; }
+
+  .hidden { display: none !important; }
+
+  /* ─── Tabs — underline style like VS Code Insiders ─── */
+  .tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    padding: 0 12px; margin-bottom: 0; gap: 0;
+  }
+  .tabs button {
+    width: auto; flex: none; padding: 9px 14px 8px; margin: 0;
+    font-size: 12px; font-weight: 400; letter-spacing: 0;
+    background: transparent; color: var(--desc-fg);
+    border: none; border-bottom: 2px solid transparent;
+    border-radius: 0; cursor: pointer; transition: color 0.1s, border-color 0.1s;
+  }
+  .tabs button:hover { color: var(--fg); background: transparent; }
+  .tabs button.active {
+    color: var(--fg); font-weight: 500;
+    border-bottom-color: var(--btn-bg);
+    background: transparent;
+  }
+
+  /* ─── Section content padding ─── */
+  .tab-content { padding: 4px 20px 20px; }
+
+  /* ─── Select ─── */
+  select {
+    width: 100%; padding: 6px 8px; background: var(--input-bg); color: var(--input-fg);
+    border: 1px solid var(--input-border); border-radius: 4px; font-size: 13px;
+    font-family: var(--vscode-font-family); outline: none;
+  }
+  select:focus { border-color: var(--focus-border); }
+
+  /* ─── Buttons ─── */
+  button {
+    width: 100%; padding: 8px 14px; background: var(--btn-bg); color: var(--btn-fg);
+    border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+    font-family: var(--vscode-font-family); margin-top: 8px; transition: opacity 0.1s;
+  }
+  button:hover { background: var(--btn-hover); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary {
+    background: var(--sec-btn-bg); color: var(--sec-btn-fg);
+  }
+
+  /* ─── Checkbox group — list-style like VS Code settings ─── */
+  .checkbox-group { display: flex; flex-direction: column; gap: 0; }
+  .checkbox-group label {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;
+    padding: 6px 8px; border-radius: 4px; margin: 0 -8px; transition: background 0.1s;
+  }
+  .checkbox-group label:hover { background: var(--list-hover); }
+  .checkbox-group input[type="checkbox"] {
+    width: 16px; height: 16px; accent-color: var(--btn-bg); flex-shrink: 0;
+  }
+
+  /* ─── Progress model rows ─── */
+  .model-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 8px; margin: 0 -8px; border-radius: 4px; font-size: 13px;
+    border-bottom: none; transition: background 0.1s; flex-wrap: wrap;
+  }
+  .model-row:hover { background: var(--list-hover); }
+  .model-row + .model-row { border-top: 1px solid var(--border); }
+  .model-row .name { font-weight: 500; }
+  .model-row .elapsed-time {
+    color: var(--desc-fg); font-size: 12px; margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .model-row .elapsed-bytes {
+    color: var(--desc-fg); font-size: 12px; margin-right: 10px; margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── Badges — pill style ─── */
+  .badge {
+    padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.2px;
+  }
+  .badge.pending { background: rgba(255,255,255,0.06); color: var(--desc-fg); }
+  .badge.running { background: var(--vscode-progressBar-background); color: #fff; }
+  .badge.done { background: var(--vscode-testing-iconPassed); color: #fff; }
+  .badge.failed, .badge.timeout { background: var(--vscode-testing-iconFailed); color: #fff; }
+  .badge.timeout-pending { background: var(--vscode-editorWarning-foreground); color: #fff; }
+
+  /* ─── Timeout actions ─── */
+  .timeout-actions {
+    display: flex; gap: 6px; width: 100%; margin-top: 4px; padding: 0;
+  }
+  .timeout-actions button {
+    width: auto; flex: 1; padding: 5px 10px; font-size: 12px; margin: 0; border-radius: 4px;
+  }
+  .timeout-actions .extend-btn { background: var(--btn-bg); color: var(--btn-fg); }
+  .timeout-actions .kill-btn { background: var(--sec-btn-bg); color: var(--sec-btn-fg); }
+
+  /* ─── Result blocks ─── */
+  .result-block { margin-bottom: 4px; }
+  .result-block details { border-radius: 4px; overflow: hidden; }
+  .result-block summary {
+    cursor: pointer; font-size: 13px; font-weight: 500; padding: 8px 8px; margin: 0 -8px;
+    border-radius: 4px; transition: background 0.1s; list-style: none;
+  }
+  .result-block summary::-webkit-details-marker { display: none; }
+  .result-block summary::before {
+    content: '\25B6'; display: inline-block; width: 16px; font-size: 9px;
+    transition: transform 0.15s; color: var(--desc-fg);
+  }
+  .result-block details[open] summary::before { transform: rotate(90deg); }
+  .result-block summary:hover { background: var(--list-hover); }
+  .result-block pre {
+    background: var(--input-bg); padding: 12px; border-radius: 4px;
+    overflow-x: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+    max-height: 300px; overflow-y: auto; margin-top: 4px;
+    border: 1px solid var(--border);
+  }
+  .result-output-wrapper {
+    position: relative;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    width: auto; padding: 3px 8px; margin: 0; font-size: 11px;
+    background: var(--sec-btn-bg); color: var(--sec-btn-fg);
+    border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; opacity: 0; transition: opacity 0.15s;
+  }
+  .result-output-wrapper:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--btn-bg); color: var(--btn-fg); }
+
+  .error { color: var(--vscode-errorForeground); font-size: 13px; margin: 8px 0; }
+
+  /* ─── Grading ─── */
+  .grade-row { display: flex; align-items: center; gap: 8px; margin: 2px 0; padding: 6px 0; }
+  .grade-row .name { width: 60px; font-size: 12px; font-weight: 500; color: var(--fg); }
+  .grade-row input[type="range"] { flex: 1; height: 4px; accent-color: var(--btn-bg); }
+  .grade-row .val {
+    width: 24px; text-align: center; font-weight: 700; font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  textarea {
+    width: 100%; height: 40px; padding: 6px 8px; background: var(--input-bg); color: var(--input-fg);
+    border: 1px solid var(--input-border); border-radius: 4px; font-size: 12px; resize: vertical;
+    font-family: var(--vscode-font-family); margin-top: 6px; outline: none;
+  }
+  textarea:focus { border-color: var(--focus-border); }
+
+  /* ─── Leaderboard ─── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--desc-fg); font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: var(--list-hover); }
+  .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score.high { color: var(--vscode-testing-iconPassed); }
+  .score.mid { color: var(--vscode-editorWarning-foreground); }
+  .score.low { color: var(--vscode-testing-iconFailed); }
+
+  /* ─── Filter pills ─── */
+  .filters { display: flex; gap: 4px; margin-bottom: 12px; }
+  .filters button {
+    width: auto; padding: 4px 12px; font-size: 12px; margin: 0;
+    background: transparent; border: 1px solid var(--border); color: var(--desc-fg);
+    border-radius: 12px; transition: all 0.1s;
+  }
+  .filters button:hover { color: var(--fg); border-color: var(--fg); background: transparent; }
+  .filters button.active {
+    background: var(--btn-bg); color: var(--btn-fg);
+    border-color: var(--btn-bg);
+  }
+
+  .sparkline svg { display: block; }
+
+  /* ─── Model type glyph ─── */
+  .model-glyph {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-right: 2px;
+    flex-shrink: 0;
+    background-color: currentColor;
+    opacity: 0.85;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+  }
+
+  /* ─── Empty states ─── */
+  .empty-state { color: var(--desc-fg); padding: 24px 0; text-align: center; font-size: 13px; }
+
+  /* ─── Skeleton loading ─── */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes entranceSlide {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .entrance { animation: entranceSlide 0.3s ease-out forwards; }
+  .skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
+  }
+  .skeleton-row {
+    height: 32px;
+    margin-bottom: 6px;
+  }
+  .skeleton-row:last-child { margin-bottom: 0; }
+  .skeleton-row.narrow { width: 70%; }
+  .skeleton-row.short { height: 18px; }
+  .skeleton-table-row {
+    display: flex; gap: 12px; padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .skeleton-table-row .skeleton-cell { height: 14px; flex: 1; }
+  .skeleton-table-row .skeleton-cell:first-child { flex: 2; }
+  .skeleton-table-row .skeleton-cell:last-child { flex: 1.5; }
+
+  /* ─── Summary card ─── */
+  .summary-card {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden; margin-bottom: 12px;
+  }
+  .summary-stat {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 10px 12px; background: var(--bg);
+  }
+  .summary-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--desc-fg); font-weight: 600;
+  }
+  .summary-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .summary-detail { font-size: 11px; color: var(--desc-fg); }
+
+  /* ─── Progress ring ─── */
+  .progress-ring {
+    display: none; width: 20px; height: 20px; border-radius: 50%;
+    flex-shrink: 0; margin-right: 6px;
+    background: conic-gradient(var(--vscode-testing-iconPassed) 0deg, transparent 0deg);
+    -webkit-mask: radial-gradient(circle, transparent 55%, black 56%);
+    mask: radial-gradient(circle, transparent 55%, black 56%);
+  }
+  .progress-ring.active { display: inline-block; }
+  @keyframes pulse-ring {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .progress-ring.extended {
+    animation: pulse-ring 1.5s ease-in-out infinite;
+    box-shadow: 0 0 4px var(--vscode-testing-iconFailed);
+  }
+
+  /* ─── Chunk preview ─── */
+  .chunk-preview {
+    display: none; width: 100%; margin-top: 4px; padding: 6px 8px;
+    background: var(--input-bg); border-radius: 4px; border: 1px solid var(--border);
+    font-size: 11px; line-height: 1.3; color: var(--desc-fg);
+    max-height: 60px; overflow: hidden; white-space: pre-wrap;
+    font-family: var(--vscode-editor-font-family, monospace);
+  }
+  .chunk-preview.active { display: block; }
+
+  /* ─── Warning banner ─── */
+  /* ─── Health dots ─── */
+  .health-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--desc-fg); opacity: 0.4; flex-shrink: 0;
+  }
+  .health-dot.available { background: var(--vscode-testing-iconPassed); opacity: 1; }
+  .health-dot.unavailable { background: var(--vscode-testing-iconFailed); opacity: 1; }
+  .suggested-badge {
+    display: none; padding: 1px 6px; border-radius: 8px; font-size: 10px;
+    font-weight: 600; background: var(--vscode-testing-iconPassed); color: #fff;
+    margin-left: auto;
+  }
+  .suggested-badge.visible { display: inline-block; }
+
+  /* ─── History list ─── */
+  .history-list { max-height: 240px; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+  .history-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 8px; margin: 0 -8px; border-radius: 4px; cursor: pointer;
+    font-size: 12px; transition: background 0.1s; min-width: 0;
+  }
+  .history-item:hover { background: var(--list-hover); }
+  .history-title {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0; flex: 1;
+  }
+  .history-pr { font-weight: 500; }
+  .history-date { color: var(--desc-fg); font-size: 11px; white-space: nowrap; margin-left: 8px; flex-shrink: 0; }
+
+  /* ─── Comparison view ─── */
+  .compare-panel { margin-top: 12px; }
+  .compare-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  .compare-tabs button {
+    width: auto; flex: none; padding: 6px 12px; margin: 0; font-size: 12px;
+    background: transparent; color: var(--desc-fg); border: none;
+    border-bottom: 2px solid transparent; border-radius: 0; cursor: pointer;
+  }
+  .compare-tabs button:hover { color: var(--fg); background: transparent; }
+  .compare-tabs button.active {
+    color: var(--fg); font-weight: 500; border-bottom-color: var(--btn-bg); background: transparent;
+  }
+  .compare-content pre {
+    background: var(--input-bg); padding: 12px; border-radius: 4px;
+    overflow-x: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+    max-height: 400px; overflow-y: auto; border: 1px solid var(--border);
+  }
+  .compare-model-header {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px;
+  }
+  .compare-model-header .score-badge {
+    padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 600;
+  }
+  .finding-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px;
+    font-weight: 600; margin-right: 4px; margin-bottom: 2px;
+  }
+  .finding-tag.consensus { background: var(--vscode-testing-iconPassed); color: #fff; }
+  .finding-tag.unique { background: var(--vscode-editorWarning-foreground); color: #fff; }
+  .consensus-summary { margin-bottom: 12px; }
+  .consensus-summary h3 {
+    font-size: 12px; font-weight: 600; margin: 8px 0 4px; color: var(--fg);
+  }
+  .consensus-item {
+    padding: 4px 8px; font-size: 12px; border-left: 3px solid var(--vscode-testing-iconPassed);
+    margin-bottom: 4px; background: rgba(255,255,255,0.02); border-radius: 0 4px 4px 0;
+  }
+  .unique-item {
+    padding: 4px 8px; font-size: 12px; border-left: 3px solid var(--vscode-editorWarning-foreground);
+    margin-bottom: 4px; background: rgba(255,255,255,0.02); border-radius: 0 4px 4px 0;
+  }
+
+  .warning-banner {
+    padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 12px;
+    background: rgba(255,204,0,0.08);
+    border-left: 3px solid var(--vscode-editorWarning-foreground);
+    color: var(--fg); line-height: 1.4;
+  }

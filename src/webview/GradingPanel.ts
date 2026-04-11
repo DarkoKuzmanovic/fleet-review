@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { ExtensionMessage, ReviewRecord, ScoreEntry, WebviewMessage } from '../types';
 import { ScoreStore } from '../scoring/ScoreStore';
+import { ESCAPE_HTML_JS, escapeHtml } from './webviewUtils';
 
 export class GradingPanel {
   private readonly panel: vscode.WebviewPanel;
@@ -215,11 +216,7 @@ export class GradingPanel {
       'Grades saved: ' + scores.map(s => s.model + '=' + s.score).join(', ');
   }
 
-  function escapeHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
+  ${ESCAPE_HTML_JS}
 
   init();
 </script>
@@ -228,6 +225,3 @@ export class GradingPanel {
   }
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
