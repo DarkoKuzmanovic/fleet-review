@@ -50,59 +50,64 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(msg: WebviewMessage): Promise<void> {
     this.output.appendLine(`[${new Date().toISOString()}] Sidebar received message: ${msg.type}`);
-    switch (msg.type) {
-      case "requestPRs":
-        await this.fetchPRs();
-        break;
-      case "startReview":
-        await this.startReview(msg.models, msg.prNumber);
-        break;
-      case "cancelReview":
-        this.orchestrator.cancel();
-        this.pendingTimeouts.forEach((resolve) => resolve("kill"));
-        this.pendingTimeouts.clear();
-        break;
-      case "extendTimeout": {
-        const resolver = this.pendingTimeouts.get(msg.model);
-        if (resolver) {
-          this.pendingTimeouts.delete(msg.model);
-          resolver("extend");
-        }
-        break;
-      }
-      case "killModel": {
-        const resolver = this.pendingTimeouts.get(msg.model);
-        if (resolver) {
-          this.pendingTimeouts.delete(msg.model);
-          resolver("kill");
-        }
-        break;
-      }
-      case "gradeWithClaude":
-        this.gradeWithClaude();
-        break;
-      case "submitGrades":
-        this.submitGrades(msg.scores);
-        break;
-      case "requestLeaderboard":
-        this.sendLeaderboard(msg.timeframe);
-        break;
-      case "retryModel":
-        if (!MODEL_NAMES.includes(msg.model)) {
-          this.post({ type: "error", message: `Invalid model: ${msg.model}` });
+    try {
+      switch (msg.type) {
+        case "requestPRs":
+          await this.fetchPRs();
+          break;
+        case "startReview":
+          await this.startReview(msg.models, msg.prNumber);
+          break;
+        case "cancelReview":
+          this.orchestrator.cancel();
+          this.pendingTimeouts.forEach((resolve) => resolve("kill"));
+          this.pendingTimeouts.clear();
+          break;
+        case "extendTimeout": {
+          const resolver = this.pendingTimeouts.get(msg.model);
+          if (resolver) {
+            this.pendingTimeouts.delete(msg.model);
+            resolver("extend");
+          }
           break;
         }
-        await this.retryModel(msg.model);
-        break;
-      case "retryAllFailed":
-        await this.retryAllFailed();
-        break;
-      case "checkModelHealth":
-        await this.checkModelHealth();
-        break;
-      case "requestReviewHistory":
-        this.post({ type: "reviewHistory", reviews: this.store.getRecentReviews(20) });
-        break;
+        case "killModel": {
+          const resolver = this.pendingTimeouts.get(msg.model);
+          if (resolver) {
+            this.pendingTimeouts.delete(msg.model);
+            resolver("kill");
+          }
+          break;
+        }
+        case "gradeWithClaude":
+          this.gradeWithClaude();
+          break;
+        case "submitGrades":
+          this.submitGrades(msg.scores);
+          break;
+        case "requestLeaderboard":
+          this.sendLeaderboard(msg.timeframe);
+          break;
+        case "retryModel":
+          if (!MODEL_NAMES.includes(msg.model)) {
+            this.post({ type: "error", message: `Invalid model: ${msg.model}` });
+            break;
+          }
+          await this.retryModel(msg.model);
+          break;
+        case "retryAllFailed":
+          await this.retryAllFailed();
+          break;
+        case "checkModelHealth":
+          await this.checkModelHealth();
+          break;
+        case "requestReviewHistory":
+          this.post({ type: "reviewHistory", reviews: this.store.getRecentReviews(20) });
+          break;
+      }
+    } catch (err) {
+      const msg2 = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Fleet Review: ${msg2}`);
     }
   }
 
@@ -171,59 +176,71 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private gradeWithClaude(): void {
-    const review = this.store.getLatestReview();
-    if (!review) {
-      vscode.window.showWarningMessage("Fleet Review: No review to grade");
-      return;
+    try {
+      const review = this.store.getLatestReview();
+      if (!review) {
+        vscode.window.showWarningMessage("Fleet Review: No review to grade");
+        return;
+      }
+      this.store.writeLastReview(review);
+
+      const models = Object.entries(review.results)
+        .filter(([, r]) => r.success)
+        .map(([m]) => m);
+
+      const prompt = [
+        `Read the review data from ${this.store.lastReviewPath}`,
+        ``,
+        `Grade each model (${models.join(', ')}) on a scale of 1-10 based on:`,
+        `- Accuracy of findings (are they real issues?)`,
+        `- Severity calibration (are severities appropriate?)`,
+        `- Actionability (are suggested fixes useful?)`,
+        `- Coverage (did it catch important issues?)`,
+        ``,
+        `Write your grades to ${this.store.pendingScoresPath} in this exact format:`,
+        `{`,
+        `  "reviewId": "<id from the review file>",`,
+        `  "scores": [`,
+        `    { "model": "<name>", "score": <1-10>, "feedback": "<one line>" }`,
+        `  ]`,
+        `}`,
+      ].join('\n');
+
+      this.post({ type: 'gradePromptReady', prompt });
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
     }
-    this.store.writeLastReview(review);
-
-    const models = Object.entries(review.results)
-      .filter(([, r]) => r.success)
-      .map(([m]) => m);
-
-    const prompt = [
-      `Read the review data from ${this.store.lastReviewPath}`,
-      ``,
-      `Grade each model (${models.join(', ')}) on a scale of 1-10 based on:`,
-      `- Accuracy of findings (are they real issues?)`,
-      `- Severity calibration (are severities appropriate?)`,
-      `- Actionability (are suggested fixes useful?)`,
-      `- Coverage (did it catch important issues?)`,
-      ``,
-      `Write your grades to ${this.store.pendingScoresPath} in this exact format:`,
-      `{`,
-      `  "reviewId": "<id from the review file>",`,
-      `  "scores": [`,
-      `    { "model": "<name>", "score": <1-10>, "feedback": "<one line>" }`,
-      `  ]`,
-      `}`,
-    ].join('\n');
-
-    this.post({ type: 'gradePromptReady', prompt });
   }
 
   private submitGrades(scores: Array<{ model: string; score: number; feedback: string }>): void {
-    const review = this.store.getLatestReview();
-    if (!review) return;
+    try {
+      const review = this.store.getLatestReview();
+      if (!review) return;
 
-    const entries = scores.map((s) => ({
-      reviewId: review.id,
-      model: s.model,
-      score: s.score,
-      feedback: s.feedback,
-      gradedBy: "user" as const,
-      timestamp: new Date().toISOString(),
-    }));
+      const entries = scores.map((s) => ({
+        reviewId: review.id,
+        model: s.model,
+        score: s.score,
+        feedback: s.feedback,
+        gradedBy: "user" as const,
+        timestamp: new Date().toISOString(),
+      }));
 
-    this.store.saveScores(entries);
-    vscode.window.showInformationMessage(`Fleet Review: Grades saved for ${entries.length} models`);
-    this.post({ type: "gradesImported", scores: entries });
+      this.store.saveScores(entries);
+      vscode.window.showInformationMessage(`Fleet Review: Grades saved for ${entries.length} models`);
+      this.post({ type: "gradesImported", scores: entries });
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private sendLeaderboard(timeframe: "week" | "month" | "all"): void {
-    const stats = this.store.getModelStats(timeframe);
-    this.post({ type: "leaderboard", stats });
+    try {
+      const stats = this.store.getModelStats(timeframe);
+      this.post({ type: "leaderboard", stats });
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async checkModelHealth(): Promise<void> {
@@ -318,7 +335,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const modelTimeoutsJson = JSON.stringify(Config.modelTimeouts);
     const apiModelsJson = JSON.stringify([...API_MODELS]);
     const diffSizeThreshold = Config.diffSizeWarningThreshold;
-    const modelStatsJson = JSON.stringify(this.store.getModelStats("all"));
+    let stats;
+    try {
+      stats = this.store.getModelStats("all");
+    } catch {
+      stats = new Map();
+    }
+    const modelStatsJson = JSON.stringify(stats);
     const webview = this.view!.webview;
     const cliIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "cli.svg"));
     const apiIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "api.svg"));

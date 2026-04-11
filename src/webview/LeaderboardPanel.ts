@@ -42,9 +42,13 @@ export class LeaderboardPanel {
   }
 
   private sendStats(timeframe: 'week' | 'month' | 'all'): void {
-    const stats = this.store.getModelStats(timeframe);
-    const response: ExtensionMessage = { type: 'leaderboard', stats };
-    this.panel.webview.postMessage(response);
+    try {
+      const stats = this.store.getModelStats(timeframe);
+      const response: ExtensionMessage = { type: 'leaderboard', stats };
+      this.panel.webview.postMessage(response);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private dispose(): void {

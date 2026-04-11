@@ -42,18 +42,22 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand("fleetReview.gradeWithClaude", () => {
-      const review = store.getLatestReview();
-      if (!review) {
-        vscode.window.showWarningMessage("Fleet Review: No review to grade");
-        return;
-      }
+      try {
+        const review = store.getLatestReview();
+        if (!review) {
+          vscode.window.showWarningMessage("Fleet Review: No review to grade");
+          return;
+        }
 
-      store.writeLastReview(review);
-      vscode.window.showInformationMessage(
-        `Fleet Review: Review data written to ${store.lastReviewPath}. ` +
-          "Open Claude Code and ask it to grade the review and write scores to " +
-          store.pendingScoresPath,
-      );
+        store.writeLastReview(review);
+        vscode.window.showInformationMessage(
+          `Fleet Review: Review data written to ${store.lastReviewPath}. ` +
+            "Open Claude Code and ask it to grade the review and write scores to " +
+            store.pendingScoresPath,
+        );
+      } catch (err) {
+        vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }),
 
     vscode.commands.registerCommand("fleetReview.viewScores", () => {

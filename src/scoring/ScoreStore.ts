@@ -69,7 +69,7 @@ export class ScoreStore {
         this.reviewsCache = [];
         return this.reviewsCache;
       }
-      throw err;
+      throw new Error(`Failed to load ${this.reviewsPath}: ${err}`, { cause: err });
     }
   }
 
@@ -117,7 +117,7 @@ export class ScoreStore {
         this.scoresCache = [];
         return this.scoresCache;
       }
-      throw err;
+      throw new Error(`Failed to load ${this.scoresPath}: ${err}`, { cause: err });
     }
   }
 

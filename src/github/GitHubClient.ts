@@ -45,13 +45,22 @@ export class GitHubClient {
       "--limit",
       "30",
     ]);
-    let raw: any;
+    let raw: Array<{
+      number: number;
+      title: string;
+      author: { login: string };
+      createdAt: string;
+      headRefName: string;
+      additions: number;
+      deletions: number;
+    }>;
     try {
       raw = JSON.parse(json);
-    } catch {
-      throw new Error(`Failed to parse GitHub CLI output in listPRs: ${json.slice(0, 200)}`);
+    } catch (e) {
+      const preview = json.length === 0 ? '<empty>' : json.slice(0, 200);
+      throw new Error(`Failed to parse GitHub CLI output in listPRs: ${preview}`, { cause: e });
     }
-    const prs = (raw as Array<any>).map((pr) => ({
+    const prs = raw.map((pr) => ({
       number: pr.number,
       title: pr.title,
       author: pr.author.login,
@@ -82,8 +91,9 @@ export class GitHubClient {
     let raw: any;
     try {
       raw = JSON.parse(json);
-    } catch {
-      throw new Error(`Failed to parse GitHub CLI output in getPRInfo: ${json.slice(0, 200)}`);
+    } catch (e) {
+      const preview = json.length === 0 ? '<empty>' : json.slice(0, 200);
+      throw new Error(`Failed to parse GitHub CLI output in getPRInfo: ${preview}`, { cause: e });
     }
     return {
       number: raw.number,
@@ -157,8 +167,9 @@ export class GitHubClient {
     let raw: any;
     try {
       raw = JSON.parse(json);
-    } catch {
-      throw new Error(`Failed to parse GitHub CLI output in getAuditComments: ${json.slice(0, 200)}`);
+    } catch (e) {
+      const preview = json.length === 0 ? '<empty>' : json.slice(0, 200);
+      throw new Error(`Failed to parse GitHub CLI output in getAuditComments: ${preview}`, { cause: e });
     }
     const comments: Array<{ model: string; body: string }> = [];
     for (const c of raw.comments ?? []) {
