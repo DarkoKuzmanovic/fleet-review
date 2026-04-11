@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand("fleetReview.gradeWithClaude", () => {
+    vscode.commands.registerCommand("fleetReview.gradeWithClaude", async () => {
       try {
         const review = store.getLatestReview();
         if (!review) {
@@ -49,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        store.writeLastReview(review);
+        await store.writeLastReview(review);
         vscode.window.showInformationMessage(
           `Fleet Review: Review data written to ${store.lastReviewPath}. ` +
             "Open Claude Code and ask it to grade the review and write scores to " +

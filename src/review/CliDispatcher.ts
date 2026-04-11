@@ -205,8 +205,8 @@ export class CliDispatcher {
       settled = true;
       clearTimeout(timer);
       const message = err instanceof Error ? err.message : String(err);
-      const isUserAbort = signal?.aborted || (err instanceof Error && err.name === 'AbortError');
-      const isAbort = isUserAbort || message.includes('abort');
+      const isUserAbort = signal?.aborted === true;
+      const isAbort = isUserAbort || (err instanceof Error && err.name === 'AbortError') || message.includes('abort');
       if (isAbort) {
         this.log('GLM: request aborted');
         throw new Error(isUserAbort ? 'Review cancelled' : `glm timed out after ${effectiveTimeout / 1000}s`);
@@ -288,11 +288,6 @@ export class CliDispatcher {
       });
       this.log(`Spawned ${command} with pid ${proc.pid}`);
 
-      proc.stderr.on('data', (chunk: Buffer) => {
-        const text = chunk.toString().trim();
-        if (text) this.log(`${command} stderr: ${text.substring(0, 200)}`);
-      });
-
       let stdout = '';
       let stderr = '';
       let settled = false;
@@ -357,7 +352,10 @@ export class CliDispatcher {
       });
 
       proc.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        const trimmed = text.trim();
+        if (trimmed) this.log(`${command} stderr: ${trimmed.substring(0, 200)}`);
       });
 
       proc.on('error', (err) => {

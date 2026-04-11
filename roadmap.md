@@ -64,11 +64,11 @@ Surface errors that are currently swallowed silently.
 
 Low-risk hygiene improvements.
 
-- [ ] Merge duplicate `stderr` listeners into one (`CliDispatcher.ts`, finding #17)
-- [ ] Clean up `pendingTimeouts` Map in a top-level `finally` to prevent leaks (`SidebarProvider.ts`, finding #10)
-- [ ] Remove dead types `ReviewStatus` and `PendingScores` (`types.ts`, finding #15)
-- [ ] Switch `writeFileSync` to `fs.promises.writeFile` in ScoreStore (`ScoreStore.ts`, finding #9)
-- [ ] Wire up Review History Drawer UI — backend plumbing (`requestReviewHistory`, `getRecentReviews`) exists, needs sidebar rendering (from `ideas.md`)
+- [x] Merge duplicate `stderr` listeners into one (`CliDispatcher.ts`, finding #17)
+- [x] Clean up `pendingTimeouts` Map in a top-level `finally` to prevent leaks (`SidebarProvider.ts`, finding #10)
+- [x] Remove dead types `ReviewStatus` and `PendingScores` (`types.ts`, finding #15)
+- [x] Switch `writeFileSync` to `fs.promises.writeFile` in ScoreStore (`ScoreStore.ts`, finding #9)
+- [x] Wire up Review History Drawer UI — backend plumbing (`requestReviewHistory`, `getRecentReviews`) exists, needs sidebar rendering (from `ideas.md`)
 
 ### v0.4.0 — Quality and Parity
 

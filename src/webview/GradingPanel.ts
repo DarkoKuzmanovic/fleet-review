@@ -49,7 +49,7 @@ export class GradingPanel {
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
   }
 
-  private handleMessage(msg: WebviewMessage): void {
+  private async handleMessage(msg: WebviewMessage): Promise<void> {
     if (msg.type === 'submitGrades') {
       try {
         const entries: ScoreEntry[] = msg.scores.map((s) => ({
@@ -61,7 +61,7 @@ export class GradingPanel {
           timestamp: new Date().toISOString(),
         }));
 
-        this.store.saveScores(entries);
+        await this.store.saveScores(entries);
 
         vscode.window.showInformationMessage(
           `Fleet Review: Grades saved for ${entries.length} models`

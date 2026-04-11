@@ -11,6 +11,7 @@ import { Config } from '../config';
 export class ScoreStore {
   private reviewsCache: ReviewRecord[] | null = null;
   private scoresCache: ScoreEntry[] | null = null;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   private get dir(): string {
     return Config.dataDir;
@@ -41,19 +42,26 @@ export class ScoreStore {
     this.scoresCache = null;
   }
 
+  private async serializedWrite(fn: () => Promise<void>): Promise<void> {
+    this.writeQueue = this.writeQueue.then(fn, fn);
+    return this.writeQueue;
+  }
+
   // --- Reviews ---
 
-  saveReview(review: ReviewRecord): void {
-    this.ensureDir();
-    const reviews = this.loadReviews();
-    const idx = reviews.findIndex((r) => r.id === review.id);
-    if (idx >= 0) {
-      reviews[idx] = review;
-    } else {
-      reviews.push(review);
-    }
-    fs.writeFileSync(this.reviewsPath, JSON.stringify(reviews, null, 2));
-    this.reviewsCache = reviews;
+  async saveReview(review: ReviewRecord): Promise<void> {
+    return this.serializedWrite(async () => {
+      this.ensureDir();
+      const reviews = this.loadReviews();
+      const idx = reviews.findIndex((r) => r.id === review.id);
+      if (idx >= 0) {
+        reviews[idx] = review;
+      } else {
+        reviews.push(review);
+      }
+      await fs.promises.writeFile(this.reviewsPath, JSON.stringify(reviews, null, 2));
+      this.reviewsCache = reviews;
+    });
   }
 
   loadReviews(): ReviewRecord[] {
@@ -88,20 +96,24 @@ export class ScoreStore {
 
   // --- Scores ---
 
-  saveScore(entry: ScoreEntry): void {
-    this.ensureDir();
-    const scores = this.loadScores();
-    scores.push(entry);
-    fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
-    this.scoresCache = scores;
+  async saveScore(entry: ScoreEntry): Promise<void> {
+    return this.serializedWrite(async () => {
+      this.ensureDir();
+      const scores = this.loadScores();
+      scores.push(entry);
+      await fs.promises.writeFile(this.scoresPath, JSON.stringify(scores, null, 2));
+      this.scoresCache = scores;
+    });
   }
 
-  saveScores(entries: ScoreEntry[]): void {
-    this.ensureDir();
-    const scores = this.loadScores();
-    scores.push(...entries);
-    fs.writeFileSync(this.scoresPath, JSON.stringify(scores, null, 2));
-    this.scoresCache = scores;
+  async saveScores(entries: ScoreEntry[]): Promise<void> {
+    return this.serializedWrite(async () => {
+      this.ensureDir();
+      const scores = this.loadScores();
+      scores.push(...entries);
+      await fs.promises.writeFile(this.scoresPath, JSON.stringify(scores, null, 2));
+      this.scoresCache = scores;
+    });
   }
 
   loadScores(): ScoreEntry[] {
@@ -166,20 +178,22 @@ export class ScoreStore {
 
   // --- Last review for Claude Code grading ---
 
-  writeLastReview(review: ReviewRecord): void {
-    this.ensureDir();
-    const data = {
-      reviewId: review.id,
-      repo: review.repo,
-      prNumber: review.prNumber,
-      prTitle: review.prTitle,
-      results: Object.fromEntries(
-        Object.entries(review.results)
-          .filter(([, r]) => r.success)
-          .map(([model, r]) => [model, { output: r.output }])
-      ),
-    };
-    fs.writeFileSync(this.lastReviewPath, JSON.stringify(data, null, 2));
+  async writeLastReview(review: ReviewRecord): Promise<void> {
+    return this.serializedWrite(async () => {
+      this.ensureDir();
+      const data = {
+        reviewId: review.id,
+        repo: review.repo,
+        prNumber: review.prNumber,
+        prTitle: review.prTitle,
+        results: Object.fromEntries(
+          Object.entries(review.results)
+            .filter(([, r]) => r.success)
+            .map(([model, r]) => [model, { output: r.output }])
+        ),
+      };
+      await fs.promises.writeFile(this.lastReviewPath, JSON.stringify(data, null, 2));
+    });
   }
 
   // --- Pending scores from Claude Code ---
