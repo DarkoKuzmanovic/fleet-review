@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.6] - 2026-04-12
 
+### Security
+
+- Webview footer no longer injects `this.version` unescaped into HTML — `extension.ts` validates the `packageJSON.version` type and `SidebarProvider.ts` runs it through `escapeHtml` before interpolation (flagged by claude, codex, copilot, glm, qwen, trinity, gemini)
+- Host-side `submitGrades` validates each score is a finite number in `1..10` and that the `model` field matches a registered provider, blocking crafted `postMessage` payloads that could persist out-of-range scores (roadmap finding #6; flagged by qwen, glm, minimax, trinity)
+- Model names embedded into sidebar `innerHTML` sinks (model checkboxes, progress rows, result detail, grade sliders) are now HTML-escaped before interpolation, closing an XSS vector where a malicious `customProviders[].name` could inject script via the webview (flagged by gemini, minimax, qwen, glm, codex)
+- Sidebar webview `escapeHtml` is now a pure string replace that also escapes `"` and `'`, so attribute-context escaping is safe (flagged by minimax)
+- `checkModelHealth` builds its result map with `Object.create(null)` rather than `{}`, removing a theoretical prototype-pollution vector if a provider name ever collides with `__proto__` (flagged by codex)
+- Sidebar `chunkBuffers` is now created with `Object.create(null)` and reset on `reviewError` as well as `reviewComplete`/`startReview`, preventing stale streaming state from leaking across reviews (flagged by qwen, codex)
+
+### Fixed
+
+- `retryAllFailed` now dispatches failed models in parallel via `Promise.allSettled` instead of awaiting each one sequentially, matching the initial review run (roadmap finding #4; flagged by gemini, qwen, minimax, trinity)
+- Token-usage aggregation on the sidebar summary card guards against missing `tu.prompt` / `tu.completion` fields, so a provider without usage data no longer produces `NaN in / NaN out` (flagged by gemini)
+- `CliDispatcher` unit test updated to reflect the new Codex argument list
+
 ### Changed
 
 - Codex CLI provider now runs with `--model gpt-5.3-codex --effort high` for consistent high-quality output
@@ -17,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Version number shown in the sidebar footer (`v0.4.6`) — pulled from `package.json` at render time via the extension context
+- Version number shown in the sidebar footer (`v0.4.6`) — pulled from `package.json` at render time via the extension context, HTML-escaped before injection
 - Three NanoGPT thinking models registered in workspace settings: DeepSeek V3.2, Kimi K2.5, and Nemotron 120B — all with a 600 s per-provider timeout to accommodate extended reasoning time
 
 ## [0.4.5] - 2026-04-12

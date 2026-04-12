@@ -10,7 +10,7 @@ import { PromptBuilder } from "../review/PromptBuilder";
 import { ReviewOrchestrator } from "../review/ReviewOrchestrator";
 import { ProviderRegistry } from "../review/providers/registry";
 import { ScoreStore } from "../scoring/ScoreStore";
-import { safeJsonForHtml } from "./webviewUtils";
+import { escapeHtml, safeJsonForHtml } from "./webviewUtils";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
@@ -231,11 +231,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       const review = this.store.getLatestReview();
       if (!review) return;
 
+      if (!Array.isArray(scores)) {
+        vscode.window.showErrorMessage("Fleet Review: invalid grade payload");
+        return;
+      }
+
+      const knownModels = new Set(this.registry.list().map((p) => p.name));
+      for (const s of scores) {
+        if (!s || typeof s.model !== "string" || !knownModels.has(s.model)) {
+          vscode.window.showErrorMessage(`Fleet Review: unknown model in grade payload`);
+          return;
+        }
+        if (typeof s.score !== "number" || !Number.isFinite(s.score) || s.score < 1 || s.score > 10) {
+          vscode.window.showErrorMessage(`Fleet Review: score for ${s.model} must be 1–10`);
+          return;
+        }
+      }
+
       const entries = scores.map((s) => ({
         reviewId: review.id,
         model: s.model,
-        score: s.score,
-        feedback: s.feedback,
+        score: Math.round(s.score),
+        feedback: typeof s.feedback === "string" ? s.feedback : "",
         gradedBy: "user" as const,
         timestamp: new Date().toISOString(),
       }));
@@ -259,7 +276,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   private async checkModelHealth(): Promise<void> {
     const execFileAsync = promisify(execFile);
-    const health: Record<string, boolean> = {};
+    const health: Record<string, boolean> = Object.create(null);
 
     for (const provider of this.registry.list()) {
       if (provider.kind === "cli") {
@@ -321,14 +338,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (failedModels.length === 0) return;
 
     try {
-      for (const model of failedModels) {
-        await this.retryModelCore(model);
+      const results = await Promise.allSettled(failedModels.map((model) => this.retryModelCore(model)));
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (rejected.length && rejected.length === results.length) {
+        const first = rejected[0].reason;
+        this.post({ type: "reviewError", error: first instanceof Error ? first.message : String(first) });
+        return;
       }
       if (this.lastReview) {
         this.post({ type: "reviewComplete", review: this.lastReview });
       }
-    } catch (err) {
-      this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
     } finally {
       this.clearPendingTimeouts();
     }
@@ -483,7 +502,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   };
 </script>
 <script src="${jsUri}"></script>
-<footer class="sidebar-footer">v${this.version}</footer>
+<footer class="sidebar-footer">v${escapeHtml(this.version)}</footer>
 </body>
 </html>`;
   }

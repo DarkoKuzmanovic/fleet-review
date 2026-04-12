@@ -12,7 +12,7 @@ const MODEL_STATS = window.__FR_CONFIG.modelStats;
 let prs = [];
 let currentReview = null;
 let prLoadTimer = null;
-var chunkBuffers = {};
+var chunkBuffers = Object.create(null);
 var reviewHistory = [];
 var isViewingHistory = false;
 
@@ -131,22 +131,24 @@ function modelGlyphHtml(m) {
 }
 
 function buildModelCheckboxes() {
-  document.getElementById("model-checkboxes").innerHTML = ALL_MODELS.map(
-    (m) =>
+  document.getElementById("model-checkboxes").innerHTML = ALL_MODELS.map((m) => {
+    var em = escapeHtml(m);
+    return (
       '<label><input type="checkbox" value="' +
-      m +
+      em +
       '"' +
       (DEFAULT_MODELS.includes(m) ? " checked" : "") +
       "> " +
       '<span class="health-dot" data-model="' +
-      m +
+      em +
       '" title="checking..."></span> ' +
       modelGlyphHtml(m) +
-      m +
+      em +
       '<span class="suggested-badge" data-model="' +
-      m +
-      '">Suggested</span></label>',
-  ).join("");
+      em +
+      '">Suggested</span></label>'
+    );
+  }).join("");
   applySuggestedBadges();
 }
 
@@ -186,28 +188,30 @@ function startReview() {
 
   showState("progress");
   isViewingHistory = false;
-  chunkBuffers = {};
+  chunkBuffers = Object.create(null);
   document.getElementById("progress-models").innerHTML = models
-    .map(
-      (m) =>
+    .map(function (m) {
+      var em = escapeHtml(m);
+      return (
         '<div class="model-row entrance" id="progress-' +
-        m +
+        em +
         '">' +
         '<span class="progress-ring" id="ring-' +
-        m +
+        em +
         '"></span>' +
         '<span class="name">' +
         modelGlyphHtml(m) +
-        m +
+        em +
         "</span>" +
         '<span class="elapsed-time"></span>' +
         '<span class="elapsed-bytes"></span>' +
         '<span class="badge pending">pending</span>' +
         '<pre class="chunk-preview" id="chunks-' +
-        m +
+        em +
         '"></pre>' +
-        "</div>",
-    )
+        "</div>"
+      );
+    })
     .join("");
 
   startElapsedTimer();
@@ -453,8 +457,8 @@ function renderSummaryCard(review) {
   models.forEach(function (m) {
     var tu = review.results[m].tokenUsage;
     if (tu) {
-      totalPromptTokens += tu.prompt;
-      totalCompletionTokens += tu.completion;
+      totalPromptTokens += tu.prompt || 0;
+      totalCompletionTokens += tu.completion || 0;
     }
   });
   var hasTokens = totalPromptTokens > 0 || totalCompletionTokens > 0;
@@ -525,7 +529,7 @@ function renderResults(review) {
     if (r.success) details.open = true;
     var summary = document.createElement("summary");
     summary.innerHTML =
-      modelGlyphHtml(m) + m + (r.success ? " ✓" : " ✗") + " — " + (r.durationMs / 1000).toFixed(1) + "s";
+      modelGlyphHtml(m) + escapeHtml(m) + (r.success ? " ✓" : " ✗") + " — " + (r.durationMs / 1000).toFixed(1) + "s";
     details.appendChild(summary);
 
     if (r.success) {
@@ -777,17 +781,19 @@ function renderGradeForm() {
 
   const models = Object.entries(currentReview.results).filter(([, r]) => r.success);
   document.getElementById("grade-sliders").innerHTML = models
-    .map(
-      ([m]) =>
+    .map(([m]) => {
+      var em = escapeHtml(m);
+      return (
         '<div class="grade-row" data-model="' +
-        m +
+        em +
         '">' +
         '<span class="name">' +
-        m +
+        em +
         "</span>" +
         '<input type="range" min="1" max="10" value="5" oninput="this.parentElement.querySelector(\'.val\').textContent=this.value">' +
-        '<span class="val">5</span></div>',
-    )
+        '<span class="val">5</span></div>'
+      );
+    })
     .join("");
 }
 
@@ -942,6 +948,7 @@ window.addEventListener("message", (e) => {
     case "reviewComplete":
       stopElapsedTimer();
       modelStartTimes = {};
+      chunkBuffers = Object.create(null);
       isViewingHistory = false;
       currentReview = msg.review;
       renderResults(msg.review);
@@ -949,6 +956,7 @@ window.addEventListener("message", (e) => {
     case "reviewError":
       stopElapsedTimer();
       modelStartTimes = {};
+      chunkBuffers = Object.create(null);
       showState("select");
       document.getElementById("pr-error").textContent = msg.error;
       document.getElementById("pr-error").classList.remove("hidden");
@@ -985,9 +993,12 @@ window.addEventListener("message", (e) => {
 });
 
 function escapeHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // Defer init so the VS Code webview message bridge is ready

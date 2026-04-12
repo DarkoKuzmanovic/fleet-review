@@ -30,13 +30,16 @@ export function activate(context: vscode.ExtensionContext) {
 
   // --- Sidebar webview ---
 
+  const rawVersion = context.extension.packageJSON?.version;
+  const version = typeof rawVersion === "string" ? rawVersion : "";
+
   const sidebarProvider = new SidebarProvider(
     context.extensionUri,
     github,
     store,
     registry,
     output,
-    context.extension.packageJSON.version as string,
+    version,
   );
 
   context.subscriptions.push(

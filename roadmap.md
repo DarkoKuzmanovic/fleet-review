@@ -8,26 +8,40 @@
 
 Findings from a manual audit of the 0.4.6 codebase.
 
-| # | Finding | Location | Notes |
-|---|---------|----------|-------|
-| 1 | `getPRInfo` uses `raw: any` | `GitHubClient.ts:93` | The `getPRInfo` parse result is typed as `any`; other parse sites in the same file use explicit inline types |
-| 2 | `writeFileSync` still used for comment temp files | `GitHubClient.ts:113,148` | `postComment` and `postInlineComments` use synchronous `writeFileSync` / `unlinkSync` on the extension host thread |
-| 3 | `getAuditComments` regex matches any word | `GitHubClient.ts:169` | `/## Audit by \`(\w+)\`` — `\w+` will match provider names with hyphens or dots if they ever appear; better to match against known registry names |
-| 4 | `RetryAllFailed` runs models sequentially | `SidebarProvider.ts` | `retryAllFailed()` loops `for (const model of failedModels)` with `await` — should be parallel like the initial run |
-| 5 | `GradeImporter` silently ignores watcher ENOENT | `GradeImporter.ts:29` | Outer `try {}` swallows all watcher errors, not just the expected ENOENT; a permissions error goes unnoticed |
-| 6 | `score` range never validated on manual grade submit | `SidebarProvider.ts:submitGrades` | The webview sends scores from a slider (min/max enforced by the DOM), but the host never checks `1 ≤ score ≤ 10` — a crafted message can store an out-of-range score |
-| 7 | `handleTimeout` not `async`-safe in cli.ts | `cli.ts:spawnWithStdin` | `handleTimeout` is called from a `setTimeout` callback; if `onTimeout` resolves after the process has already settled, a second `settle()` call is made — harmless today because `settle` guards, but the extend path calls `startTimer()` unconditionally after `settled = true` could be set |
-| 8 | Version passed as raw string from `packageJSON` | `extension.ts:33` | `context.extension.packageJSON.version` is typed as `any`; the cast `as string` is safe today but an explicit check or use of the `ExtensionContext.extension.packageJSON` type would be safer |
-| 9 | No truncation of model output before saving | `ReviewOrchestrator.ts` | A runaway model can produce megabytes; `reviews.json` will grow unbounded — a simple max-length cap on `result.stdout` before storing would prevent disk bloat |
-| 10 | `modelGlyphHtml` in sidebar.js is a linear scan | `sidebar.js` | Called once per model per tick of `renderResults` — not a hot path, but building it as a lookup object at init time is cleaner |
+| #   | Finding                                              | Location                          | Notes                                                                                                                                                                                                                                                                                          |
+| --- | ---------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `getPRInfo` uses `raw: any`                          | `GitHubClient.ts:93`              | The `getPRInfo` parse result is typed as `any`; other parse sites in the same file use explicit inline types                                                                                                                                                                                   |
+| 2   | `writeFileSync` still used for comment temp files    | `GitHubClient.ts:113,148`         | `postComment` and `postInlineComments` use synchronous `writeFileSync` / `unlinkSync` on the extension host thread                                                                                                                                                                             |
+| 3   | `getAuditComments` regex matches any word            | `GitHubClient.ts:169`             | `/## Audit by \`(\w+)\``—`\w+` will match provider names with hyphens or dots if they ever appear; better to match against known registry names                                                                                                                                                |
+| 4   | `RetryAllFailed` runs models sequentially            | `SidebarProvider.ts`              | `retryAllFailed()` loops `for (const model of failedModels)` with `await` — should be parallel like the initial run                                                                                                                                                                            |
+| 5   | `GradeImporter` silently ignores watcher ENOENT      | `GradeImporter.ts:29`             | Outer `try {}` swallows all watcher errors, not just the expected ENOENT; a permissions error goes unnoticed                                                                                                                                                                                   |
+| 6   | `score` range never validated on manual grade submit | `SidebarProvider.ts:submitGrades` | The webview sends scores from a slider (min/max enforced by the DOM), but the host never checks `1 ≤ score ≤ 10` — a crafted message can store an out-of-range score                                                                                                                           |
+| 7   | `handleTimeout` not `async`-safe in cli.ts           | `cli.ts:spawnWithStdin`           | `handleTimeout` is called from a `setTimeout` callback; if `onTimeout` resolves after the process has already settled, a second `settle()` call is made — harmless today because `settle` guards, but the extend path calls `startTimer()` unconditionally after `settled = true` could be set |
+| 8   | Version passed as raw string from `packageJSON`      | `extension.ts:33`                 | `context.extension.packageJSON.version` is typed as `any`; the cast `as string` is safe today but an explicit check or use of the `ExtensionContext.extension.packageJSON` type would be safer                                                                                                 |
+| 9   | No truncation of model output before saving          | `ReviewOrchestrator.ts`           | A runaway model can produce megabytes; `reviews.json` will grow unbounded — a simple max-length cap on `result.stdout` before storing would prevent disk bloat                                                                                                                                 |
+| 10  | `modelGlyphHtml` in sidebar.js is a linear scan      | `sidebar.js`                      | Called once per model per tick of `renderResults` — not a hot path, but building it as a lookup object at init time is cleaner                                                                                                                                                                 |
 
 ### Bug Fixes
 
 - [ ] Replace `raw: any` in `getPRInfo` with a typed inline interface (`GitHubClient.ts`, finding #1)
 - [ ] Replace synchronous `writeFileSync`/`unlinkSync` with `fs.promises` equivalents in `postComment` and `postInlineComments` (`GitHubClient.ts`, finding #2)
 - [ ] Clamp model output to a configurable max length (e.g. 200 KB) before persisting in `ReviewOrchestrator` (`finding #9`)
-- [ ] Validate `1 ≤ score ≤ 10` in `submitGrades` on the extension host side (`SidebarProvider.ts`, finding #6)
-- [ ] Run `retryAllFailed` models in parallel with `Promise.allSettled` instead of sequentially (`SidebarProvider.ts`, finding #4)
+- [x] Validate `1 ≤ score ≤ 10` in `submitGrades` on the extension host side (`SidebarProvider.ts`, finding #6) — _landed in 0.4.6_
+- [x] Run `retryAllFailed` models in parallel with `Promise.allSettled` instead of sequentially (`SidebarProvider.ts`, finding #4) — _landed in 0.4.6_
+- [x] Validate `packageJSON.version` type before passing to `SidebarProvider` (`extension.ts`, finding #8) — _landed in 0.4.6_
+
+### Fleet Review-on-0.4.6 Fix Set (2026-04-12)
+
+Fixes landed directly in PR #10 after grading the self-review. Consensus findings from 8 models (claude, codex, gemini, qwen, copilot, glm, minimax, trinity):
+
+- [x] Escape `this.version` in the sidebar footer and harden the `packageJSON.version` cast (`extension.ts`, `SidebarProvider.ts`)
+- [x] Validate score range and model identity in `submitGrades` on the extension host
+- [x] HTML-escape model names in all `sidebar.js` `innerHTML` sinks (checkboxes, progress rows, result detail, grade sliders)
+- [x] Replace DOM-based `escapeHtml` in the webview with a pure string-replace that also escapes `"` and `'`
+- [x] Parallelize `retryAllFailed` with `Promise.allSettled`
+- [x] Use `Object.create(null)` for the `checkModelHealth` result map and the sidebar `chunkBuffers`
+- [x] Guard `tokenUsage` aggregation against missing `prompt` / `completion` fields
+- [x] Clear `chunkBuffers` on `reviewError` as well as `reviewComplete`
 
 ### Small Feature Improvements
 
