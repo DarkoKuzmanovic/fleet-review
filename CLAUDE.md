@@ -14,8 +14,14 @@ fleet-review/
 │   │   └── GitHubClient.ts       # Wraps `gh` CLI: list PRs, fetch diff, post comments
 │   ├── review/
 │   │   ├── PromptBuilder.ts      # Project detection + audit/merge prompt construction
-│   │   ├── CliDispatcher.ts      # Spawns claude/codex/gemini/qwen/copilot via child_process
-│   │   └── ReviewOrchestrator.ts # Parallel dispatch, progress tracking, result collection
+│   │   ├── CliDispatcher.ts      # Thin shim — resolves a provider from the registry and delegates
+│   │   ├── ReviewOrchestrator.ts # Parallel dispatch, progress tracking, result collection
+│   │   └── providers/
+│   │       ├── types.ts          # CliProvider | HttpProvider discriminated union, HttpGateway
+│   │       ├── builtins.ts       # Built-in providers (claude/codex/gemini/qwen/copilot + glm) and gateways (nanogpt, openrouter)
+│   │       ├── registry.ts       # ProviderRegistry — merges built-ins + custom, reads keys from SecretStorage
+│   │       ├── cli.ts            # runCli(provider, prompt, ctx) — spawn + stdin + timeout
+│   │       └── http.ts           # runHttp(provider, gateway, apiKey, prompt, ctx) — SSE streaming
 │   ├── scoring/
 │   │   ├── ScoreStore.ts         # JSON file persistence (~/.config/fleet-review/)
 │   │   └── GradeImporter.ts      # Watches pending-scores.json, validates, imports
@@ -45,26 +51,34 @@ fleet-review/
 
 ## Architecture
 
-- **No APIs** — all AI calls go through locally installed CLIs (claude, codex, gemini, qwen, copilot)
+- **Pluggable providers** — `ProviderRegistry` holds a discriminated union of `CliProvider | HttpProvider`. Built-ins live in [src/review/providers/builtins.ts](src/review/providers/builtins.ts); custom entries come from `fleetReview.customProviders` / `fleetReview.customGateways`.
+- **CLI models** spawn local binaries via `child_process.spawn()` (claude, codex, gemini, qwen, copilot)
+- **HTTP models** call OpenAI-compatible gateways — built-in `nanogpt` hosts `glm`; `openrouter` is registered as a gateway by default so custom providers can reference it without extra config
+- **Gateway API keys** live in VS Code SecretStorage under `fleet-review.gateway.<name>.apiKey`. Env-var fallback: `FLEET_REVIEW_<GATEWAY>_API_KEY`. The `Fleet Review: Set Gateway API Key` command is the supported way to set them.
 - **Sidebar-first UI** — main workflow lives in the Activity Bar sidebar via `SidebarProvider`
 - **JSON storage** at `~/.config/fleet-review/` (reviews.json, scores.json, last-review.json, pending-scores.json)
 - **Claude Code grading** via file handoff: extension writes `last-review.json`, user asks Claude Code to grade and write `pending-scores.json`, extension auto-imports via fs.watch
 
-## CLI Dispatch
+## Provider Dispatch
 
-Each model is invoked via `child_process.spawn()` in `CliDispatcher.ts`:
-- Prompt written to temp file, piped via stdin (avoids shell arg length limits)
-- 5-minute timeout per model (configurable via `fleetReview.timeoutSeconds`)
-- All models dispatched in parallel via `Promise.allSettled()`
-- All spawns use `cwd: os.tmpdir()` to prevent CLI tools from scanning the workspace
+`CliDispatcher.dispatch(name, prompt, ...)` resolves a provider from the registry and calls either `runCli` or `runHttp`:
 
-| CLI | Command pattern |
-|-----|----------------|
-| claude | `claude -p --output-format text < prompt.md` |
-| codex | `codex exec --dangerously-bypass-approvals-and-sandbox - < prompt.md` |
-| gemini | `gemini --model gemini-2.5-flash -e "" -p "Review the provided code" --output-format text < prompt.md` |
-| qwen | `qwen -p "" --output-format text < prompt.md` |
-| copilot | `copilot -p "" -s --model gpt-5.3-codex --effort high --allow-all-tools < prompt.md` |
+- CLI path: prompt written to temp file, piped via stdin (avoids shell arg length limits), parallel via `Promise.allSettled()`, `cwd: os.tmpdir()` to prevent workspace scanning
+- HTTP path: OpenAI-compatible chat-completions streaming (SSE), token usage parsed from the final frame
+- Default timeout 5 minutes (configurable via `fleetReview.timeoutSeconds`); any provider can override via its own `timeoutSeconds`
+
+Built-in command patterns:
+
+| Provider | Kind | Command / gateway + model |
+| -------- | ---- | ------------------------- |
+| claude | cli | `claude -p --output-format text` |
+| codex | cli | `codex exec --dangerously-bypass-approvals-and-sandbox -` |
+| gemini | cli | `gemini -e "" -p "Review the provided code" --output-format text` |
+| qwen | cli | `qwen -p "" --output-format text` |
+| copilot | cli | `copilot -p "" -s --model gpt-5.3-codex --effort high --allow-all-tools` |
+| glm | http | gateway `nanogpt`, modelId `zai-org/glm-5:thinking` |
+
+Adding a new model is a settings-only change — no code edits. Example: to add `minimax/minimax-m2.7` via Nano-GPT, append an entry to `fleetReview.customProviders` with `kind: "http"`, `gateway: "nanogpt"`, and the desired `modelId`, then set the gateway key once via the command palette.
 
 ## Build & Run
 

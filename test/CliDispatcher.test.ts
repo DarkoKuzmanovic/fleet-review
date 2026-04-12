@@ -7,9 +7,7 @@ vi.mock('vscode');
 vi.mock('../src/config', () => ({
   Config: {
     timeoutMs: 300000,
-    timeoutMsForModel: () => 300000,
-    nanoGptApiKey: '',
-    geminiModel: 'auto',
+    defaultTimeoutSeconds: 300,
   },
 }));
 
@@ -32,6 +30,7 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 import { CliDispatcher } from '../src/review/CliDispatcher';
+import { ProviderRegistry } from '../src/review/providers/registry';
 
 const mockSpawn = vi.mocked(spawn);
 
@@ -58,12 +57,27 @@ function createMockProcess(stdout = '', exitCode = 0, errorEvent?: Error) {
   return proc;
 }
 
+function createRegistry(): ProviderRegistry {
+  const secrets = {
+    get: async () => undefined,
+    store: async () => {},
+    delete: async () => {},
+    onDidChange: () => ({ dispose() {} }),
+  } as unknown as import('vscode').SecretStorage;
+
+  return new ProviderRegistry({
+    defaultTimeoutMs: 300000,
+    secrets,
+  });
+}
+
 describe('CliDispatcher.dispatch - command routing', () => {
   let dispatcher: CliDispatcher;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dispatcher = new CliDispatcher();
+    delete process.env.FLEET_REVIEW_NANOGPT_API_KEY;
+    dispatcher = new CliDispatcher(createRegistry());
   });
 
   it('spawns claude with correct args', async () => {
@@ -96,7 +110,7 @@ describe('CliDispatcher.dispatch - command routing', () => {
     );
   });
 
-  it('spawns gemini with correct args when geminiModel is auto', async () => {
+  it('spawns gemini with correct args', async () => {
     mockSpawn.mockReturnValue(createMockProcess('review output') as any);
     await dispatcher.dispatch('gemini', 'test prompt');
     expect(mockSpawn).toHaveBeenCalledWith(
@@ -115,21 +129,28 @@ describe('CliDispatcher.dispatch - command routing', () => {
       expect.any(Object)
     );
   });
+
+  it('returns error for unknown model instead of spawning', async () => {
+    const result = await dispatcher.dispatch('no-such-model', 'test prompt');
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Unknown model');
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
 });
 
-describe('CliDispatcher.dispatch - glm routing', () => {
+describe('CliDispatcher.dispatch - glm (http) routing', () => {
   let dispatcher: CliDispatcher;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dispatcher = new CliDispatcher();
+    delete process.env.FLEET_REVIEW_NANOGPT_API_KEY;
+    dispatcher = new CliDispatcher(createRegistry());
   });
 
   it('returns error result for glm when no API key is configured', async () => {
-    // Config.nanoGptApiKey is '' per the mock above
     const result = await dispatcher.dispatch('glm', 'test prompt');
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('Nano-GPT API key');
+    expect(result.stderr).toContain('nanogpt API key not configured');
     expect(mockSpawn).not.toHaveBeenCalled();
   });
 });
@@ -139,7 +160,8 @@ describe('CliDispatcher.dispatch - process results', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dispatcher = new CliDispatcher();
+    delete process.env.FLEET_REVIEW_NANOGPT_API_KEY;
+    dispatcher = new CliDispatcher(createRegistry());
   });
 
   it('returns stdout from successful process', async () => {
@@ -188,14 +210,14 @@ describe('CliDispatcher.dispatch - abort signal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dispatcher = new CliDispatcher();
+    delete process.env.FLEET_REVIEW_NANOGPT_API_KEY;
+    dispatcher = new CliDispatcher(createRegistry());
   });
 
   it('rejects immediately if signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
 
-    // Provide a mock process even though it won't be used
     mockSpawn.mockReturnValue(createMockProcess('output') as any);
 
     await expect(

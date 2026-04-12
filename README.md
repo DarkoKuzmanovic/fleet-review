@@ -53,20 +53,42 @@ Then press **F5** in VS Code to launch the Extension Development Host.
 | `Fleet Review: Grade Models` | Opens full-page grading panel with sliders |
 | `Fleet Review: Grade with Claude Code` | Writes review data for Claude Code to grade |
 | `Fleet Review: Show Leaderboard` | Opens full-page leaderboard with sparklines |
+| `Fleet Review: Set Gateway API Key` | Stores an HTTP gateway API key in VS Code SecretStorage |
 
 ## Configuration
 
 | Setting | Default | Description |
 | ------- | ------- | ----------- |
-| `fleetReview.defaultModels` | `["claude", "gemini", "qwen"]` | Models to select by default |
-| `fleetReview.geminiModel` | `auto` | Gemini model (`auto`, `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-*-preview`) |
-| `fleetReview.nanoGptApiKey` | `""` | Nano-GPT API key used by GLM reviews (falls back to `NANO_GPT_API_KEY`) |
-| `fleetReview.timeoutSeconds` | `300` | Timeout per model (seconds) |
-| `fleetReview.modelTimeouts` | `{}` | Per-model timeout overrides (seconds) for `claude`, `codex`, `gemini`, `qwen`, `copilot`, and `glm` |
+| `fleetReview.defaultModels` | `["claude", "gemini", "qwen"]` | Models pre-checked in the review panel. Any registered provider name is valid. |
+| `fleetReview.timeoutSeconds` | `300` | Default timeout per model (seconds). Individual providers can override via their own `timeoutSeconds`. |
+| `fleetReview.customProviders` | `[]` | User-registered CLI or HTTP model providers. Each entry declares a `kind` (`cli` or `http`) plus the command/gateway details — see [Custom providers](#custom-providers). |
+| `fleetReview.customGateways` | `[]` | User-defined OpenAI-compatible HTTP gateways (name + baseUrl + optional headers). API keys are stored separately via the `Set Gateway API Key` command. |
 | `fleetReview.diffSizeWarningThreshold` | `1500` | Warn before reviewing PRs with more changed lines than this |
 | `fleetReview.projectPrompts` | `{}` | Custom review prompts per project type — overrides default audit instructions while preserving the output format |
 | `fleetReview.projectHints` | `{}` | Extra hints appended per project type without replacing the full prompt |
 | `fleetReview.dataDir` | `~/.config/fleet-review` | Directory for review data and scores |
+
+### Custom providers
+
+Fleet Review ships with six built-in providers: `claude`, `codex`, `gemini`, `qwen`, `copilot` (CLI-based) and `glm` (HTTP, via the Nano-GPT gateway). To add more models without editing code, register entries in `fleetReview.customProviders`. HTTP providers point at a gateway in `fleetReview.customGateways` or at one of the built-in gateways (`nanogpt`, `openrouter`).
+
+Example — adding another Nano-GPT model:
+
+```jsonc
+{
+  "fleetReview.customProviders": [
+    {
+      "name": "minimax",
+      "displayName": "MiniMax",
+      "kind": "http",
+      "gateway": "nanogpt",
+      "modelId": "minimax/minimax-m2.7"
+    }
+  ]
+}
+```
+
+Then run `Fleet Review: Set Gateway API Key`, pick `nanogpt`, and paste your key. The new model shows up in the sidebar checkboxes and participates in merge reports. The key is stored in VS Code SecretStorage; `FLEET_REVIEW_NANOGPT_API_KEY` in the environment works as a fallback.
 
 ## How scoring works
 
@@ -85,10 +107,11 @@ Stored in `~/.config/fleet-review/` (configurable):
 
 ## Architecture
 
-- **No APIs** — all AI calls go through locally installed CLIs via `child_process.spawn()`
+- **Pluggable providers** — CLI models spawn local binaries via `child_process.spawn()`; HTTP models call OpenAI-compatible gateways (Nano-GPT, OpenRouter). Both route through a single `ProviderRegistry`.
 - **Sidebar-first UI** — main workflow lives in the Activity Bar
 - **JSON file storage** — no database, no server
 - **Parallel dispatch** via `Promise.allSettled()` with per-model timeout + extend/kill controls
+- **Gateway API keys in SecretStorage** — never written to `settings.json`; set via `Fleet Review: Set Gateway API Key`
 
 ## Shell script
 

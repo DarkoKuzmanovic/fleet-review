@@ -1,7 +1,5 @@
-export const MODEL_NAMES = ['claude', 'codex', 'gemini', 'qwen', 'copilot', 'glm'] as const;
-export type ModelName = (typeof MODEL_NAMES)[number];
-
-export const API_MODELS: ReadonlySet<ModelName> = new Set(['glm']);
+/** Opaque string identifying a model provider (e.g. 'claude', 'glm', or a user-registered name). */
+export type ModelName = string;
 
 export type ModelStatus = 'pending' | 'running' | 'done' | 'failed' | 'timeout' | 'timeout-pending';
 

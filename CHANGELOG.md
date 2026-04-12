@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-04-12
+
+### Added
+
+- `ModelProvider` abstraction in `src/review/providers/` — discriminated union of `CliProvider | HttpProvider` with a `ProviderRegistry` that merges built-ins with user-registered providers
+- `HttpGateway` registry — multiple HTTP providers can share one base URL + API key (Nano-GPT, OpenRouter built in)
+- `fleetReview.customProviders` setting — register additional CLI or HTTP models without editing code
+- `fleetReview.customGateways` setting — register additional OpenAI-compatible HTTP gateways
+- `Fleet Review: Set Gateway API Key` command — stores keys in VS Code `SecretStorage` (encrypted per user, never in `settings.json`)
+- Dynamic merge-report Consensus Summary table — columns reflect the models that actually participated, not a fixed list of five
+- Env-var fallback for gateway keys: `FLEET_REVIEW_<GATEWAY>_API_KEY` (e.g. `FLEET_REVIEW_NANOGPT_API_KEY`)
+
+### Changed
+
+- `CliDispatcher` is now a thin shim over `runCli` / `runHttp` resolved through `ProviderRegistry`; per-model dispatch switch removed
+- `ReviewOrchestrator` takes a `ProviderRegistry` and reads per-provider timeouts from `provider.defaultTimeoutMs` instead of `Config.timeoutMsForModel`
+- `fleetReview.defaultModels` no longer enforces an enum of built-in names — any registered provider name is valid
+- Sidebar model health check uses the registry: CLI providers run `which <command>`, HTTP providers check whether a gateway API key is set
+
+### Removed
+
+- `MODEL_NAMES` const and `API_MODELS` set from `src/types.ts` — replaced by runtime registry lookups
+- `fleetReview.geminiModel` setting — to use a specific Gemini model, add a custom provider entry
+- `fleetReview.nanoGptApiKey` setting — use the new `Set Gateway API Key` command instead
+- `fleetReview.modelTimeouts` setting — set `timeoutSeconds` on the individual custom provider entry
+- `Config.timeoutMsForModel`, `Config.modelTimeouts`, `Config.geminiModel`, `Config.nanoGptApiKey` getters
+
+### Migration
+
+- Existing Nano-GPT users: re-enter the key once via `Fleet Review: Set Gateway API Key` → `nanogpt`, or set `FLEET_REVIEW_NANOGPT_API_KEY` in the environment
+- Existing `modelTimeouts` overrides: define a custom provider entry with the built-in's shape and your desired `timeoutSeconds`
+
 ## [0.4.0] - 2026-04-12
 
 ### Added

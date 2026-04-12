@@ -2,7 +2,7 @@
   "name": "fleet-review",
   "displayName": "Fleet Review",
   "description": "Multi-AI code review for GitHub PRs with model scoring",
-  "version": "0.4.0",
+  "version": "0.4.5",
   "icon": "media/icon.png",
   "publisher": "darko-kuzmanovic",
   "license": "MIT",
@@ -41,6 +41,11 @@
         "command": "fleetReview.viewScores",
         "title": "Show Leaderboard",
         "category": "Fleet Review"
+      },
+      {
+        "command": "fleetReview.setGatewayApiKey",
+        "title": "Set Gateway API Key",
+        "category": "Fleet Review"
       }
     ],
     "viewsContainers": {
@@ -67,49 +72,93 @@
         "fleetReview.defaultModels": {
           "type": "array",
           "items": {
-            "type": "string",
-            "enum": [
-              "claude",
-              "codex",
-              "gemini",
-              "qwen",
-              "copilot",
-              "glm"
-            ]
+            "type": "string"
           },
           "default": [
             "claude",
             "gemini",
             "qwen"
           ],
-          "description": "Default AI models to use for code review"
+          "description": "Default models pre-checked in the review panel. Must match provider names from built-ins or fleetReview.customProviders."
         },
         "fleetReview.dataDir": {
           "type": "string",
           "default": "~/.config/fleet-review",
           "description": "Directory for review data and scores"
         },
-        "fleetReview.geminiModel": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-3-flash-preview",
-            "gemini-3.1-pro-preview"
-          ],
-          "default": "auto",
-          "description": "Gemini model for code review. 'auto' lets Gemini CLI pick the best model (Gemini 3)."
-        },
-        "fleetReview.nanoGptApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Nano-GPT API key for GLM model reviews. Get one at nano-gpt.com. Falls back to NANO_GPT_API_KEY env var."
-        },
         "fleetReview.timeoutSeconds": {
           "type": "number",
           "default": 300,
-          "description": "Default timeout in seconds for each model's review. Can be overridden per model via modelTimeouts."
+          "description": "Default timeout in seconds for each model's review. Individual providers may override this via their own timeoutSeconds field."
+        },
+        "fleetReview.customProviders": {
+          "type": "array",
+          "default": [],
+          "description": "User-registered model providers. Each entry is either a CLI-based or HTTP-based provider. API keys for HTTP providers are stored via the 'Fleet Review: Set Gateway API Key' command (not here).",
+          "items": {
+            "type": "object",
+            "required": ["name", "displayName", "kind"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique provider id (e.g. 'sonnet-via-openrouter'). Used as the key in reviews and scores."
+              },
+              "displayName": {
+                "type": "string",
+                "description": "Label shown in the sidebar and reports."
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["cli", "http"],
+                "description": "'cli' spawns a local binary. 'http' calls a registered gateway's chat-completions endpoint."
+              },
+              "command": {
+                "type": "string",
+                "description": "(cli only) Binary name on PATH to spawn."
+              },
+              "args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "(cli only) Argument list passed verbatim to the binary. Prompt is piped via stdin."
+              },
+              "gateway": {
+                "type": "string",
+                "description": "(http only) Name of a gateway defined in fleetReview.customGateways or a built-in ('nanogpt', 'openrouter')."
+              },
+              "modelId": {
+                "type": "string",
+                "description": "(http only) Gateway-specific model id (e.g. 'anthropic/claude-sonnet-4' for OpenRouter)."
+              },
+              "timeoutSeconds": {
+                "type": "number",
+                "description": "Optional timeout override for this provider. Defaults to fleetReview.timeoutSeconds."
+              }
+            }
+          }
+        },
+        "fleetReview.customGateways": {
+          "type": "array",
+          "default": [],
+          "description": "User-defined HTTP gateways. Each gateway holds a baseUrl and optional headers; the API key is stored via the 'Fleet Review: Set Gateway API Key' command.",
+          "items": {
+            "type": "object",
+            "required": ["name", "baseUrl"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique gateway id referenced by HttpProvider.gateway."
+              },
+              "baseUrl": {
+                "type": "string",
+                "description": "Base URL of the OpenAI-compatible gateway (e.g. 'https://openrouter.ai/api/v1'). Path '/chat/completions' is appended automatically."
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "description": "Optional non-secret headers to include on every request (e.g. 'HTTP-Referer' for OpenRouter attribution)."
+              }
+            }
+          }
         },
         "fleetReview.diffSizeWarningThreshold": {
           "type": "number",
@@ -185,37 +234,6 @@
           },
           "default": {},
           "description": "Extra hints appended to the default project-type hints. Use to add project-specific review focus areas without replacing the entire prompt."
-        },
-        "fleetReview.modelTimeouts": {
-          "type": "object",
-          "properties": {
-            "claude": {
-              "type": "number",
-              "description": "Timeout in seconds for Claude"
-            },
-            "codex": {
-              "type": "number",
-              "description": "Timeout in seconds for Codex"
-            },
-            "gemini": {
-              "type": "number",
-              "description": "Timeout in seconds for Gemini"
-            },
-            "qwen": {
-              "type": "number",
-              "description": "Timeout in seconds for Qwen"
-            },
-            "copilot": {
-              "type": "number",
-              "description": "Timeout in seconds for Copilot"
-            },
-            "glm": {
-              "type": "number",
-              "description": "Timeout in seconds for GLM"
-            }
-          },
-          "default": {},
-          "description": "Per-model timeout overrides in seconds. Models not listed here use the default timeoutSeconds."
         }
       }
     }
