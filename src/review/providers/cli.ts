@@ -23,6 +23,10 @@ export async function runCli(
 function killProcessGroup(proc: ReturnType<typeof spawn>): void {
   const pid = proc.pid;
   if (!pid) return;
+  if (process.platform === 'win32') {
+    try { proc.kill(); } catch { /* already dead */ }
+    return;
+  }
   try { process.kill(-pid, 'SIGTERM'); } catch { /* already dead */ }
   setTimeout(() => {
     try { process.kill(-pid, 'SIGKILL'); } catch { /* already dead */ }

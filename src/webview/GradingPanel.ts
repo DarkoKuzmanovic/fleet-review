@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 
 import { ExtensionMessage, ReviewRecord, ScoreEntry, WebviewMessage } from '../types';
 import { ScoreStore } from '../scoring/ScoreStore';
-import { ESCAPE_HTML_JS, escapeHtml } from './webviewUtils';
+import { ESCAPE_HTML_JS, escapeHtml, safeJsonForHtml } from './webviewUtils';
 
 export class GradingPanel {
   private readonly panel: vscode.WebviewPanel;
@@ -87,7 +87,7 @@ export class GradingPanel {
       .filter(([, r]) => r.success)
       .map(([model, r]) => ({ model, output: r.output, durationMs: r.durationMs }));
 
-    const modelsJson = JSON.stringify(models);
+    const modelsJson = safeJsonForHtml(models);
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">

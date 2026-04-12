@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.5] - 2026-04-12
 
+### Security
+
+- Webview XSS hardening: JSON payloads injected into `<script>` blocks now escape `<` and `>`, so a custom provider `displayName` or a model output containing `</script>` can no longer break out of the script context (`src/webview/webviewUtils.ts`, `src/webview/SidebarProvider.ts`, `src/webview/GradingPanel.ts`)
+- Custom gateway `baseUrl` is validated: only `https://` is accepted, and loopback/link-local hosts are rejected to prevent SSRF and API-key exfiltration
+- `ProviderRegistry` now logs a warning when a `customGateway` shadows a built-in gateway, since stored API keys would be redirected to the new `baseUrl`
+- Provider and gateway `name` fields must match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`, blocking prototype-pollution vectors like `__proto__` and garbage that would collide with `SecretStorage` keys
+- `customGateways[].headers` values are validated to be strings; non-string values are dropped rather than spread blindly into `fetch` headers
+
+### Fixed
+
+- `timeoutSeconds: 0` (or negative) in a custom provider no longer produces a zero-millisecond timeout that fires before any response; falls back to the default timeout
+- `killProcessGroup` is platform-aware: on Windows it calls `proc.kill()` directly instead of the Unix-only `process.kill(-pid, 'SIGTERM')`, so CLI providers can be cancelled on Windows
+- Removed unused `RunResult` type export from `src/review/providers/types.ts`
+
 ### Added
 
 - `ModelProvider` abstraction in `src/review/providers/` — discriminated union of `CliProvider | HttpProvider` with a `ProviderRegistry` that merges built-ins with user-registered providers

@@ -10,6 +10,7 @@ import { PromptBuilder } from "../review/PromptBuilder";
 import { ReviewOrchestrator } from "../review/ReviewOrchestrator";
 import { ProviderRegistry } from "../review/providers/registry";
 import { ScoreStore } from "../scoring/ScoreStore";
+import { safeJsonForHtml } from "./webviewUtils";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
@@ -345,12 +346,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     for (const p of this.registry.list()) {
       modelTimeouts[p.name] = Math.round(p.defaultTimeoutMs / 1000);
     }
-    const providersJson = JSON.stringify(providerList);
-    const modelsJson = JSON.stringify(providerList.map((p) => p.name));
-    const defaultsJson = JSON.stringify(Config.defaultModels);
+    const providersJson = safeJsonForHtml(providerList);
+    const modelsJson = safeJsonForHtml(providerList.map((p) => p.name));
+    const defaultsJson = safeJsonForHtml(Config.defaultModels);
     const timeoutSec = Config.timeoutMs / 1000;
-    const modelTimeoutsJson = JSON.stringify(modelTimeouts);
-    const apiModelsJson = JSON.stringify(providerList.filter((p) => p.kind === 'http').map((p) => p.name));
+    const modelTimeoutsJson = safeJsonForHtml(modelTimeouts);
+    const apiModelsJson = safeJsonForHtml(providerList.filter((p) => p.kind === 'http').map((p) => p.name));
     const diffSizeThreshold = Config.diffSizeWarningThreshold;
     let stats;
     try {
@@ -358,7 +359,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     } catch {
       stats = new Map();
     }
-    const modelStatsJson = JSON.stringify(stats);
+    const modelStatsJson = safeJsonForHtml(stats);
     const webview = this.view!.webview;
     const cliIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "cli.svg"));
     const apiIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "api.svg"));
@@ -477,8 +478,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     apiModels: ${apiModelsJson},
     diffSizeThreshold: ${diffSizeThreshold},
     modelStats: ${modelStatsJson},
-    cliIconUri: ${JSON.stringify(cliIconUri.toString())},
-    apiIconUri: ${JSON.stringify(apiIconUri.toString())},
+    cliIconUri: ${safeJsonForHtml(cliIconUri.toString())},
+    apiIconUri: ${safeJsonForHtml(apiIconUri.toString())},
   };
 </script>
 <script src="${jsUri}"></script>

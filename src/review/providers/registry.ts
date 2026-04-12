@@ -21,13 +21,22 @@ export class ProviderRegistry {
     this.secrets = opts.secrets;
     this.log = opts.log ?? (() => { /* noop */ });
 
+    const builtInGatewayNames = new Set<string>();
     for (const gw of buildBuiltInGateways()) {
       this.gateways.set(gw.name, gw);
+      builtInGatewayNames.add(gw.name);
     }
     for (const gw of opts.customGateways ?? []) {
       if (!gw.name || !gw.baseUrl) {
         this.log(`Skipping invalid custom gateway: ${JSON.stringify(gw)}`);
         continue;
+      }
+      if (!ProviderRegistry.isSafeGatewayUrl(gw.baseUrl)) {
+        this.log(`Skipping custom gateway '${gw.name}': baseUrl must be https:// and not point to a loopback/link-local address`);
+        continue;
+      }
+      if (builtInGatewayNames.has(gw.name)) {
+        this.log(`Custom gateway '${gw.name}' overrides a built-in gateway — stored API keys will be sent to '${gw.baseUrl}'. Verify this URL is trusted.`);
       }
       this.gateways.set(gw.name, gw);
     }
@@ -74,6 +83,27 @@ export class ProviderRegistry {
 
   private static secretKey(gatewayName: string): string {
     return `fleet-review.gateway.${gatewayName}.apiKey`;
+  }
+
+  private static isSafeGatewayUrl(raw: string): boolean {
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      return false;
+    }
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '0.0.0.0' ||
+      host === '[::1]' ||
+      /^127\.\d+\.\d+\.\d+$/.test(host) ||
+      host.startsWith('169.254.')
+    ) {
+      return false;
+    }
+    return true;
   }
 
   async getGatewayApiKey(gatewayName: string): Promise<string | undefined> {

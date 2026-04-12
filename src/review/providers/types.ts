@@ -1,4 +1,4 @@
-import type { CliResult, TimeoutDecision } from '../../types';
+import type { TimeoutDecision } from '../../types';
 
 export interface BaseProvider {
   name: string;
@@ -34,5 +34,3 @@ export interface RunContext {
   onText?: (text: string) => void;
   log?: (message: string) => void;
 }
-
-export type RunResult = CliResult;

@@ -55,20 +55,30 @@ export class Config {
       if (!entry || typeof entry !== 'object') continue;
       const e = entry as Record<string, unknown>;
       if (typeof e.name !== 'string' || typeof e.baseUrl !== 'string') continue;
+      if (!Config.SAFE_NAME_RE.test(e.name)) continue;
       const gateway: HttpGateway = { name: e.name, baseUrl: e.baseUrl };
-      if (e.headers && typeof e.headers === 'object') {
-        gateway.headers = e.headers as Record<string, string>;
+      if (e.headers && typeof e.headers === 'object' && !Array.isArray(e.headers)) {
+        const headers: Record<string, string> = {};
+        for (const [k, v] of Object.entries(e.headers as Record<string, unknown>)) {
+          if (typeof v === 'string') headers[k] = v;
+        }
+        if (Object.keys(headers).length > 0) gateway.headers = headers;
       }
       out.push(gateway);
     }
     return out;
   }
 
+  private static readonly SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
+
   private static parseProviderEntry(entry: unknown): ModelProvider | null {
     if (!entry || typeof entry !== 'object') return null;
     const e = entry as Record<string, unknown>;
     if (typeof e.name !== 'string' || typeof e.displayName !== 'string') return null;
-    const timeoutSec = typeof e.timeoutSeconds === 'number' ? e.timeoutSeconds : Config.defaultTimeoutSeconds;
+    if (!Config.SAFE_NAME_RE.test(e.name)) return null;
+    const timeoutSec = typeof e.timeoutSeconds === 'number' && e.timeoutSeconds > 0
+      ? e.timeoutSeconds
+      : Config.defaultTimeoutSeconds;
     const defaultTimeoutMs = timeoutSec * 1000;
 
     if (e.kind === 'cli') {
