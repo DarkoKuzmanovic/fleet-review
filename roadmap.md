@@ -1,5 +1,58 @@
 # Roadmap: v0.3 to v0.4
 
+---
+
+## v0.4.7 — Polish and Reliability
+
+### Code Review Findings (2026-04-12)
+
+Findings from a manual audit of the 0.4.6 codebase.
+
+| # | Finding | Location | Notes |
+|---|---------|----------|-------|
+| 1 | `getPRInfo` uses `raw: any` | `GitHubClient.ts:93` | The `getPRInfo` parse result is typed as `any`; other parse sites in the same file use explicit inline types |
+| 2 | `writeFileSync` still used for comment temp files | `GitHubClient.ts:113,148` | `postComment` and `postInlineComments` use synchronous `writeFileSync` / `unlinkSync` on the extension host thread |
+| 3 | `getAuditComments` regex matches any word | `GitHubClient.ts:169` | `/## Audit by \`(\w+)\`` — `\w+` will match provider names with hyphens or dots if they ever appear; better to match against known registry names |
+| 4 | `RetryAllFailed` runs models sequentially | `SidebarProvider.ts` | `retryAllFailed()` loops `for (const model of failedModels)` with `await` — should be parallel like the initial run |
+| 5 | `GradeImporter` silently ignores watcher ENOENT | `GradeImporter.ts:29` | Outer `try {}` swallows all watcher errors, not just the expected ENOENT; a permissions error goes unnoticed |
+| 6 | `score` range never validated on manual grade submit | `SidebarProvider.ts:submitGrades` | The webview sends scores from a slider (min/max enforced by the DOM), but the host never checks `1 ≤ score ≤ 10` — a crafted message can store an out-of-range score |
+| 7 | `handleTimeout` not `async`-safe in cli.ts | `cli.ts:spawnWithStdin` | `handleTimeout` is called from a `setTimeout` callback; if `onTimeout` resolves after the process has already settled, a second `settle()` call is made — harmless today because `settle` guards, but the extend path calls `startTimer()` unconditionally after `settled = true` could be set |
+| 8 | Version passed as raw string from `packageJSON` | `extension.ts:33` | `context.extension.packageJSON.version` is typed as `any`; the cast `as string` is safe today but an explicit check or use of the `ExtensionContext.extension.packageJSON` type would be safer |
+| 9 | No truncation of model output before saving | `ReviewOrchestrator.ts` | A runaway model can produce megabytes; `reviews.json` will grow unbounded — a simple max-length cap on `result.stdout` before storing would prevent disk bloat |
+| 10 | `modelGlyphHtml` in sidebar.js is a linear scan | `sidebar.js` | Called once per model per tick of `renderResults` — not a hot path, but building it as a lookup object at init time is cleaner |
+
+### Bug Fixes
+
+- [ ] Replace `raw: any` in `getPRInfo` with a typed inline interface (`GitHubClient.ts`, finding #1)
+- [ ] Replace synchronous `writeFileSync`/`unlinkSync` with `fs.promises` equivalents in `postComment` and `postInlineComments` (`GitHubClient.ts`, finding #2)
+- [ ] Clamp model output to a configurable max length (e.g. 200 KB) before persisting in `ReviewOrchestrator` (`finding #9`)
+- [ ] Validate `1 ≤ score ≤ 10` in `submitGrades` on the extension host side (`SidebarProvider.ts`, finding #6)
+- [ ] Run `retryAllFailed` models in parallel with `Promise.allSettled` instead of sequentially (`SidebarProvider.ts`, finding #4)
+
+### Small Feature Improvements
+
+1. **Merge report button visible only when all models have results** — `btn-merge` is always shown; it should appear only after every selected model has finished (success or fail), so users can't trigger a half-baked merge.
+
+2. **Last-review badge on the History tab** — show a "latest" chip next to the most recent history entry so it's immediately clear which was the last run without reading timestamps.
+
+3. **Provider display names in progress rows** — the progress view shows the provider `name` (e.g. `deepseek`) rather than `displayName` (e.g. `DeepSeek V3.2`); use `displayName` from `__FR_CONFIG.providers`.
+
+4. **Token usage shown for HTTP models** — `ModelResult.tokenUsage` is already stored; surface `prompt + completion` token counts in the results card next to the KB size.
+
+5. **Abort in-progress merge** — `runMerge` dispatches to a single model but there is no cancel path; a thinking model could peg it for 10 minutes. Wire up an `AbortController` the same way `runReview` does.
+
+6. **Review age in history list** — the history drawer shows timestamps; replace with relative age strings ("2 h ago", "yesterday") for faster scanning. Absolute ISO date can live in `title` attribute for hover.
+
+7. **`Fleet Review: Copy Last Review ID` command** — a one-liner command that writes the latest `review.id` to the clipboard. Saves hunting through `reviews.json` when filing bug reports or manually writing `pending-scores.json`.
+
+8. **Health check for HTTP providers: verify key format before showing green dot** — currently any non-empty string stored in SecretStorage makes the dot green. A basic length check (e.g. > 10 chars) would catch obvious typos/truncations.
+
+9. **`fleetReview.maxOutputKB` setting** — expose the output-size cap (finding #9 above) as a user setting with a default of 200, so power users running large diffs with verbose models can raise it.
+
+10. **Auto-open Grading tab after review completes** — after all models finish, the sidebar stays on the Review tab. Offering an optional auto-switch to Grade (`fleetReview.autoOpenGrade: boolean`) removes a manual step for users who always grade right after reviewing.
+
+---
+
 ## Audit Triage: Verified vs. Hallucinated
 
 Based on Qwen Code's audit (2026-04-10), verified against actual codebase.

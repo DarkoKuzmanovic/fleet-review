@@ -72,7 +72,7 @@ Built-in command patterns:
 | Provider | Kind | Command / gateway + model |
 | -------- | ---- | ------------------------- |
 | claude | cli | `claude -p --output-format text` |
-| codex | cli | `codex exec --dangerously-bypass-approvals-and-sandbox -` |
+| codex | cli | `codex exec --dangerously-bypass-approvals-and-sandbox --model gpt-5.3-codex --effort high -` |
 | gemini | cli | `gemini -e "" -p "Review the provided code" --output-format text` |
 | qwen | cli | `qwen -p "" --output-format text` |
 | copilot | cli | `copilot -p "" -s --model gpt-5.3-codex --effort high --allow-all-tools` |

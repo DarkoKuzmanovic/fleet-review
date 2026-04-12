@@ -6,6 +6,37 @@
       "kind": "http",
       "gateway": "nanogpt",
       "modelId": "minimax/minimax-m2.7"
+    },
+    {
+      "name": "trinity",
+      "displayName": "Trinity",
+      "kind": "http",
+      "gateway": "openrouter",
+      "modelId": "arcee-ai/trinity-large-preview:free"
+    },
+    {
+      "name": "deepseek",
+      "displayName": "DeepSeek V3.2",
+      "kind": "http",
+      "gateway": "nanogpt",
+      "modelId": "deepseek/deepseek-v3.2:thinking",
+      "timeoutSeconds": 600
+    },
+    {
+      "name": "kimi",
+      "displayName": "Kimi K2.5",
+      "kind": "http",
+      "gateway": "nanogpt",
+      "modelId": "moonshotai/kimi-k2.5:thinking",
+      "timeoutSeconds": 600
+    },
+    {
+      "name": "nemotron",
+      "displayName": "Nemotron 120B",
+      "kind": "http",
+      "gateway": "nanogpt",
+      "modelId": "nvidia/nemotron-3-super-120b-a12b:thinking",
+      "timeoutSeconds": 600
     }
   ]
 }
