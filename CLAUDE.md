@@ -29,7 +29,7 @@ fleet-review/
 │       ├── SidebarProvider.ts    # Main sidebar UI (3 tabs: Review, Grade, Scores)
 │       ├── GradingPanel.ts       # Full-page grading with sliders + feedback
 │       ├── LeaderboardPanel.ts   # Full-page leaderboard with sparklines
-│       └── webviewUtils.ts       # Shared escapeHtml (TS fn + JS string constant)
+│       └── webviewUtils.ts       # Shared escapeHtml (TS fn + JS string constant) + safeJsonForHtml (XSS-safe JSON injection)
 ├── media/                        # Static assets loaded by webviews via URI
 │   ├── sidebar.css               # Sidebar styles (extracted from SidebarProvider.ts)
 │   └── sidebar.js                # Sidebar script (extracted from SidebarProvider.ts)
@@ -141,6 +141,21 @@ var btn = document.createElement('button');
 btn.textContent = 'Go';
 btn.onclick = function() { vscode.postMessage({ type: 'foo' }); };
 actions.appendChild(btn);
+```
+
+## Webview Pitfall: Raw `JSON.stringify` in `<script>` Blocks
+
+Never inject `JSON.stringify(data)` directly into a `<script>` block. If any string value contains `</script>`, it closes the script tag and allows script injection.
+
+Use `safeJsonForHtml(data)` from `webviewUtils.ts` instead — it escapes `<` and `>` so the JSON payload is safe to embed:
+
+```typescript
+// BAD — provider name or model output containing </script> breaks out of the script block
+const config = `<script>window.__FR = ${JSON.stringify(providers)};</script>`;
+
+// GOOD
+import { safeJsonForHtml } from '../webview/webviewUtils';
+const config = `<script>window.__FR = ${safeJsonForHtml(providers)};</script>`;
 ```
 
 ## Changelog
