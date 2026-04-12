@@ -10,7 +10,7 @@ import { PromptBuilder } from "../review/PromptBuilder";
 import { ReviewOrchestrator } from "../review/ReviewOrchestrator";
 import { ProviderRegistry } from "../review/providers/registry";
 import { ScoreStore } from "../scoring/ScoreStore";
-import { safeJsonForHtml } from "./webviewUtils";
+import { escapeHtml, safeJsonForHtml } from "./webviewUtils";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
@@ -33,6 +33,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private store: ScoreStore,
     private registry: ProviderRegistry,
     private output: vscode.OutputChannel,
+    private version: string = "",
   ) {
     this.promptBuilder = new PromptBuilder();
     this.orchestrator = new ReviewOrchestrator(
@@ -204,7 +205,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       const prompt = [
         `Read the review data from ${this.store.lastReviewPath}`,
         ``,
-        `Grade each model (${models.join(', ')}) on a scale of 1-10 based on:`,
+        `Grade each model (${models.join(", ")}) on a scale of 1-10 based on:`,
         `- Accuracy of findings (are they real issues?)`,
         `- Severity calibration (are severities appropriate?)`,
         `- Actionability (are suggested fixes useful?)`,
@@ -217,9 +218,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         `    { "model": "<name>", "score": <1-10>, "feedback": "<one line>" }`,
         `  ]`,
         `}`,
-      ].join('\n');
+      ].join("\n");
 
-      this.post({ type: 'gradePromptReady', prompt });
+      this.post({ type: "gradePromptReady", prompt });
     } catch (err) {
       vscode.window.showErrorMessage(`Fleet Review: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -230,11 +231,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       const review = this.store.getLatestReview();
       if (!review) return;
 
+      if (!Array.isArray(scores)) {
+        vscode.window.showErrorMessage("Fleet Review: invalid grade payload");
+        return;
+      }
+
+      const knownModels = new Set(this.registry.list().map((p) => p.name));
+      for (const s of scores) {
+        if (!s || typeof s.model !== "string" || !knownModels.has(s.model)) {
+          vscode.window.showErrorMessage(`Fleet Review: unknown model in grade payload`);
+          return;
+        }
+        if (typeof s.score !== "number" || !Number.isFinite(s.score) || s.score < 1 || s.score > 10) {
+          vscode.window.showErrorMessage(`Fleet Review: score for ${s.model} must be 1–10`);
+          return;
+        }
+      }
+
       const entries = scores.map((s) => ({
         reviewId: review.id,
         model: s.model,
-        score: s.score,
-        feedback: s.feedback,
+        score: Math.round(s.score),
+        feedback: typeof s.feedback === "string" ? s.feedback : "",
         gradedBy: "user" as const,
         timestamp: new Date().toISOString(),
       }));
@@ -258,12 +276,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   private async checkModelHealth(): Promise<void> {
     const execFileAsync = promisify(execFile);
-    const health: Record<string, boolean> = {};
+    const health: Record<string, boolean> = Object.create(null);
 
     for (const provider of this.registry.list()) {
-      if (provider.kind === 'cli') {
+      if (provider.kind === "cli") {
         try {
-          await execFileAsync(process.platform === 'win32' ? 'where' : 'which', [provider.command]);
+          await execFileAsync(process.platform === "win32" ? "where" : "which", [provider.command]);
           health[provider.name] = true;
         } catch {
           health[provider.name] = false;
@@ -287,9 +305,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this.lastReview,
       (m, status) => this.post({ type: "reviewProgress", model: m, status }),
       (m, bytes) => this.post({ type: "reviewBytes", model: m, bytes }),
-      (m) => new Promise<TimeoutDecision>((resolve) => {
-        this.pendingTimeouts.set(m, resolve);
-      }),
+      (m) =>
+        new Promise<TimeoutDecision>((resolve) => {
+          this.pendingTimeouts.set(m, resolve);
+        }),
       (m, text) => this.post({ type: "reviewChunk", model: m, text }),
     );
 
@@ -319,14 +338,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     if (failedModels.length === 0) return;
 
     try {
-      for (const model of failedModels) {
-        await this.retryModelCore(model);
+      const results = await Promise.allSettled(failedModels.map((model) => this.retryModelCore(model)));
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (rejected.length && rejected.length === results.length) {
+        const first = rejected[0].reason;
+        this.post({ type: "reviewError", error: first instanceof Error ? first.message : String(first) });
+        return;
       }
       if (this.lastReview) {
         this.post({ type: "reviewComplete", review: this.lastReview });
       }
-    } catch (err) {
-      this.post({ type: "reviewError", error: err instanceof Error ? err.message : String(err) });
     } finally {
       this.clearPendingTimeouts();
     }
@@ -351,7 +372,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const defaultsJson = safeJsonForHtml(Config.defaultModels);
     const timeoutSec = Config.timeoutMs / 1000;
     const modelTimeoutsJson = safeJsonForHtml(modelTimeouts);
-    const apiModelsJson = safeJsonForHtml(providerList.filter((p) => p.kind === 'http').map((p) => p.name));
+    const apiModelsJson = safeJsonForHtml(providerList.filter((p) => p.kind === "http").map((p) => p.name));
     const diffSizeThreshold = Config.diffSizeWarningThreshold;
     let stats;
     try {
@@ -390,8 +411,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     <h2>Pull Request</h2>
     <div id="pr-skeleton">
       <div class="skeleton skeleton-row"></div>
-      <div class="skeleton skeleton-row narrow"></div>
-      <div class="skeleton skeleton-row" style="width:85%"></div>
     </div>
     <select id="pr-select" class="hidden" disabled>
       <option>Loading PRs...</option>
@@ -483,6 +502,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   };
 </script>
 <script src="${jsUri}"></script>
+<footer class="sidebar-footer">v${escapeHtml(this.version)}</footer>
 </body>
 </html>`;
   }

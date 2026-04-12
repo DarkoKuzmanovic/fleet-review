@@ -95,7 +95,7 @@ describe('CliDispatcher.dispatch - command routing', () => {
     await dispatcher.dispatch('codex', 'test prompt');
     expect(mockSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec', '--dangerously-bypass-approvals-and-sandbox', '-'],
+      ['exec', '--dangerously-bypass-approvals-and-sandbox', '--model', 'gpt-5.3-codex', '--effort', 'high', '-'],
       expect.any(Object)
     );
   });

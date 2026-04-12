@@ -69,14 +69,14 @@ fleet-review/
 
 Built-in command patterns:
 
-| Provider | Kind | Command / gateway + model |
-| -------- | ---- | ------------------------- |
-| claude | cli | `claude -p --output-format text` |
-| codex | cli | `codex exec --dangerously-bypass-approvals-and-sandbox -` |
-| gemini | cli | `gemini -e "" -p "Review the provided code" --output-format text` |
-| qwen | cli | `qwen -p "" --output-format text` |
-| copilot | cli | `copilot -p "" -s --model gpt-5.3-codex --effort high --allow-all-tools` |
-| glm | http | gateway `nanogpt`, modelId `zai-org/glm-5:thinking` |
+| Provider | Kind | Command / gateway + model                                                                     |
+| -------- | ---- | --------------------------------------------------------------------------------------------- |
+| claude   | cli  | `claude -p --output-format text`                                                              |
+| codex    | cli  | `codex exec --dangerously-bypass-approvals-and-sandbox --model gpt-5.3-codex --effort high -` |
+| gemini   | cli  | `gemini -e "" -p "Review the provided code" --output-format text`                             |
+| qwen     | cli  | `qwen -p "" --output-format text`                                                             |
+| copilot  | cli  | `copilot -p "" -s --model gpt-5.3-codex --effort high --allow-all-tools`                      |
+| glm      | http | gateway `nanogpt`, modelId `zai-org/glm-5:thinking`                                           |
 
 Adding a new model is a settings-only change — no code edits. Example: to add `minimax/minimax-m2.7` via Nano-GPT, append an entry to `fleetReview.customProviders` with `kind: "http"`, `gateway: "nanogpt"`, and the desired `modelId`, then set the gateway key once via the command palette.
 
@@ -119,7 +119,7 @@ npx @vscode/vsce package -o releases/fleet-review-<version>.vsix
   "reviewId": "<id from last-review.json>",
   "scores": [
     { "model": "gemini", "score": 9, "feedback": "..." },
-    { "model": "codex",  "score": 8, "feedback": "..." }
+    { "model": "codex", "score": 8, "feedback": "..." }
   ]
 }
 ```
@@ -134,12 +134,14 @@ Instead of inline `onclick` with escaped quotes, use `document.createElement` + 
 
 ```typescript
 // BAD — \\' becomes ' inside template literal, breaks the script silently
-actions.innerHTML = '<button onclick="vscode.postMessage({type:\'foo\'})">Go</button>';
+actions.innerHTML = "<button onclick=\"vscode.postMessage({type:'foo'})\">Go</button>";
 
 // GOOD — no escaping issues
-var btn = document.createElement('button');
-btn.textContent = 'Go';
-btn.onclick = function() { vscode.postMessage({ type: 'foo' }); };
+var btn = document.createElement("button");
+btn.textContent = "Go";
+btn.onclick = function () {
+  vscode.postMessage({ type: "foo" });
+};
 actions.appendChild(btn);
 ```
 
@@ -154,7 +156,7 @@ Use `safeJsonForHtml(data)` from `webviewUtils.ts` instead — it escapes `<` an
 const config = `<script>window.__FR = ${JSON.stringify(providers)};</script>`;
 
 // GOOD
-import { safeJsonForHtml } from '../webview/webviewUtils';
+import { safeJsonForHtml } from "../webview/webviewUtils";
 const config = `<script>window.__FR = ${safeJsonForHtml(providers)};</script>`;
 ```
 

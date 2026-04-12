@@ -30,7 +30,17 @@ export function activate(context: vscode.ExtensionContext) {
 
   // --- Sidebar webview ---
 
-  const sidebarProvider = new SidebarProvider(context.extensionUri, github, store, registry, output);
+  const rawVersion = context.extension.packageJSON?.version;
+  const version = typeof rawVersion === "string" ? rawVersion : "";
+
+  const sidebarProvider = new SidebarProvider(
+    context.extensionUri,
+    github,
+    store,
+    registry,
+    output,
+    version,
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("fleetReview.sidebar", sidebarProvider, {

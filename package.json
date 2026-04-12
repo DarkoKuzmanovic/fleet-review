@@ -2,7 +2,7 @@
   "name": "fleet-review",
   "displayName": "Fleet Review",
   "description": "Multi-AI code review for GitHub PRs with model scoring",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "icon": "media/icon.png",
   "publisher": "darko-kuzmanovic",
   "license": "MIT",
@@ -97,7 +97,11 @@
           "description": "User-registered model providers. Each entry is either a CLI-based or HTTP-based provider. API keys for HTTP providers are stored via the 'Fleet Review: Set Gateway API Key' command (not here).",
           "items": {
             "type": "object",
-            "required": ["name", "displayName", "kind"],
+            "required": [
+              "name",
+              "displayName",
+              "kind"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -109,7 +113,10 @@
               },
               "kind": {
                 "type": "string",
-                "enum": ["cli", "http"],
+                "enum": [
+                  "cli",
+                  "http"
+                ],
                 "description": "'cli' spawns a local binary. 'http' calls a registered gateway's chat-completions endpoint."
               },
               "command": {
@@ -118,7 +125,9 @@
               },
               "args": {
                 "type": "array",
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "description": "(cli only) Argument list passed verbatim to the binary. Prompt is piped via stdin."
               },
               "gateway": {
@@ -142,7 +151,10 @@
           "description": "User-defined HTTP gateways. Each gateway holds a baseUrl and optional headers; the API key is stored via the 'Fleet Review: Set Gateway API Key' command.",
           "items": {
             "type": "object",
-            "required": ["name", "baseUrl"],
+            "required": [
+              "name",
+              "baseUrl"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -154,7 +166,9 @@
               },
               "headers": {
                 "type": "object",
-                "additionalProperties": { "type": "string" },
+                "additionalProperties": {
+                  "type": "string"
+                },
                 "description": "Optional non-secret headers to include on every request (e.g. 'HTTP-Referer' for OpenRouter attribution)."
               }
             }
