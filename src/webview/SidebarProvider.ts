@@ -2,13 +2,15 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import * as vscode from "vscode";
 
-import { ExtensionMessage, API_MODELS, ModelName, MODEL_NAMES, TimeoutDecision, WebviewMessage } from "../types";
+import { ExtensionMessage, ModelName, TimeoutDecision, WebviewMessage } from "../types";
 import { Config } from "../config";
 import { GitHubClient } from "../github/GitHubClient";
 import { CliDispatcher } from "../review/CliDispatcher";
 import { PromptBuilder } from "../review/PromptBuilder";
 import { ReviewOrchestrator } from "../review/ReviewOrchestrator";
+import { ProviderRegistry } from "../review/providers/registry";
 import { ScoreStore } from "../scoring/ScoreStore";
+import { safeJsonForHtml } from "./webviewUtils";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
@@ -29,10 +31,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private extensionUri: vscode.Uri,
     private github: GitHubClient,
     private store: ScoreStore,
+    private registry: ProviderRegistry,
     private output: vscode.OutputChannel,
   ) {
     this.promptBuilder = new PromptBuilder();
-    this.orchestrator = new ReviewOrchestrator(github, new CliDispatcher(output), this.promptBuilder, store, output);
+    this.orchestrator = new ReviewOrchestrator(
+      github,
+      new CliDispatcher(registry, output),
+      this.promptBuilder,
+      store,
+      registry,
+      output,
+    );
   }
 
   resolveWebviewView(
@@ -95,7 +105,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           this.sendLeaderboard(msg.timeframe);
           break;
         case "retryModel":
-          if (!MODEL_NAMES.includes(msg.model)) {
+          if (!this.registry.has(msg.model)) {
             this.post({ type: "error", message: `Invalid model: ${msg.model}` });
             break;
           }
@@ -250,16 +260,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const execFileAsync = promisify(execFile);
     const health: Record<string, boolean> = {};
 
-    for (const model of MODEL_NAMES) {
-      if (API_MODELS.has(model)) {
-        health[model] = Config.nanoGptApiKey.length > 0;
-      } else {
+    for (const provider of this.registry.list()) {
+      if (provider.kind === 'cli') {
         try {
-          await execFileAsync(process.platform === 'win32' ? 'where' : 'which', [model]);
-          health[model] = true;
+          await execFileAsync(process.platform === 'win32' ? 'where' : 'which', [provider.command]);
+          health[provider.name] = true;
         } catch {
-          health[model] = false;
+          health[provider.name] = false;
         }
+      } else {
+        const apiKey = await this.registry.getGatewayApiKey(provider.gateway);
+        health[provider.name] = !!apiKey;
       }
     }
 
@@ -326,11 +337,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   private getHtml(): string {
-    const modelsJson = JSON.stringify([...MODEL_NAMES]);
-    const defaultsJson = JSON.stringify(Config.defaultModels);
+    const providerList = this.registry.list().map((p) => ({
+      name: p.name,
+      displayName: p.displayName,
+      kind: p.kind,
+    }));
+    const modelTimeouts: Record<string, number> = {};
+    for (const p of this.registry.list()) {
+      modelTimeouts[p.name] = Math.round(p.defaultTimeoutMs / 1000);
+    }
+    const providersJson = safeJsonForHtml(providerList);
+    const modelsJson = safeJsonForHtml(providerList.map((p) => p.name));
+    const defaultsJson = safeJsonForHtml(Config.defaultModels);
     const timeoutSec = Config.timeoutMs / 1000;
-    const modelTimeoutsJson = JSON.stringify(Config.modelTimeouts);
-    const apiModelsJson = JSON.stringify([...API_MODELS]);
+    const modelTimeoutsJson = safeJsonForHtml(modelTimeouts);
+    const apiModelsJson = safeJsonForHtml(providerList.filter((p) => p.kind === 'http').map((p) => p.name));
     const diffSizeThreshold = Config.diffSizeWarningThreshold;
     let stats;
     try {
@@ -338,7 +359,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     } catch {
       stats = new Map();
     }
-    const modelStatsJson = JSON.stringify(stats);
+    const modelStatsJson = safeJsonForHtml(stats);
     const webview = this.view!.webview;
     const cliIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "cli.svg"));
     const apiIconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "api.svg"));
@@ -449,6 +470,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 <script>
   window.__FR_CONFIG = {
+    providers: ${providersJson},
     models: ${modelsJson},
     defaults: ${defaultsJson},
     timeoutSec: ${timeoutSec},
@@ -456,8 +478,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     apiModels: ${apiModelsJson},
     diffSizeThreshold: ${diffSizeThreshold},
     modelStats: ${modelStatsJson},
-    cliIconUri: ${JSON.stringify(cliIconUri.toString())},
-    apiIconUri: ${JSON.stringify(apiIconUri.toString())},
+    cliIconUri: ${safeJsonForHtml(cliIconUri.toString())},
+    apiIconUri: ${safeJsonForHtml(apiIconUri.toString())},
   };
 </script>
 <script src="${jsUri}"></script>

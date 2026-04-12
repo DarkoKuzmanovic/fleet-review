@@ -72,6 +72,7 @@ ${fence}
   }
 
   buildMergePrompt(auditOutputs: Record<string, string>, diff: string): string {
+    const models = Object.keys(auditOutputs);
     let audits = "";
     for (const [model, output] of Object.entries(auditOutputs)) {
       audits += `---\n## Audit by \`${model}\`\n\n${output}\n\n`;
@@ -80,7 +81,7 @@ ${fence}
     const maxRun = (diff.match(/`{3,}/g) ?? []).reduce((max, m) => Math.max(max, m.length), 3);
     const fence = '`'.repeat(maxRun + 1);
 
-    return `${MERGE_INSTRUCTIONS}
+    return `${buildMergeInstructions(models)}
 
 ## Audit comments from reviewers
 
@@ -138,12 +139,17 @@ const AUDIT_INSTRUCTIONS = `You are a senior code reviewer performing an indepen
 
 ${OUTPUT_FORMAT}`;
 
-const MERGE_INSTRUCTIONS = `You are consolidating code audit results from independent AI reviewers for a single PR.
+function buildMergeInstructions(models: string[]): string {
+  const total = models.length;
+  const columnHeaders = models.map((m) => ` ${m} `).join('|');
+  const columnSeparators = models.map(() => '------').join('|');
+
+  return `You are consolidating code audit results from independent AI reviewers for a single PR.
 
 ## Your task
 
 1. **Deduplicate**: Multiple AIs may flag the same issue — merge them into one entry and note which AIs agreed.
-2. **Rank by consensus**: Issues flagged by 3+ AIs → top priority. 2 AIs → high. 1 AI → evaluate on merit.
+2. **Rank by consensus**: Issues flagged by most AIs → top priority. Few AIs → evaluate on merit.
 3. **Filter noise**: Drop pure style nits or false positives. If only one AI flagged something and it looks wrong, drop it with a note.
 4. **Produce a final report** with:
    - A prioritized action list (what to fix, in order)
@@ -155,7 +161,7 @@ const MERGE_INSTRUCTIONS = `You are consolidating code audit results from indepe
 ### Action Items (ordered by priority)
 
 #### 1. [Title] — Severity: <critical|high|medium|low>
-**Consensus:** Flagged by: <list of models> (N/5)
+**Consensus:** Flagged by: <list of models> (N/${total})
 **File:** \`path/to/file\` L<line>
 **Issue:** Description
 **Recommended fix:** What to do
@@ -169,5 +175,6 @@ const MERGE_INSTRUCTIONS = `You are consolidating code audit results from indepe
 
 ### Consensus Summary
 
-| # | Issue | Claude | Codex | Gemini | Qwen | Copilot | Severity |
-|---|-------|--------|-------|--------|------|---------|----------|`;
+| # | Issue |${columnHeaders}| Severity |
+|---|-------|${columnSeparators}|----------|`;
+}

@@ -13,6 +13,7 @@ import {
 import { Config } from '../config';
 import { CliDispatcher } from './CliDispatcher';
 import { PromptBuilder } from './PromptBuilder';
+import { ProviderRegistry } from './providers/registry';
 import { GitHubClient } from '../github/GitHubClient';
 import { ScoreStore } from '../scoring/ScoreStore';
 
@@ -27,8 +28,13 @@ export class ReviewOrchestrator {
     private dispatcher: CliDispatcher,
     private promptBuilder: PromptBuilder,
     private store: ScoreStore,
+    private registry: ProviderRegistry,
     private output?: vscode.OutputChannel
   ) {}
+
+  private timeoutMsFor(modelName: string): number {
+    return this.registry.get(modelName)?.defaultTimeoutMs ?? Config.timeoutMs;
+  }
 
   get isRunning(): boolean {
     return this.abortController !== null;
@@ -79,7 +85,7 @@ export class ReviewOrchestrator {
             }
             return decision;
           } : undefined;
-          const modelTimeoutMs = Config.timeoutMsForModel(model);
+          const modelTimeoutMs = this.timeoutMsFor(model);
           const result = await this.dispatcher.dispatch(model, prompt, onBytes ? (bytes) => onBytes(model, bytes) : undefined, signal, onModelTimeout, modelTimeoutMs, onText ? (text) => onText(model, text) : undefined);
           const durationMs = Date.now() - startTime;
 
@@ -283,7 +289,7 @@ export class ReviewOrchestrator {
         }
         return decision;
       } : undefined;
-      const modelTimeoutMs = Config.timeoutMsForModel(model);
+      const modelTimeoutMs = this.timeoutMsFor(model);
       const result = await this.dispatcher.dispatch(
         model, this.lastPrompt,
         onBytes ? (bytes) => onBytes(model, bytes) : undefined,

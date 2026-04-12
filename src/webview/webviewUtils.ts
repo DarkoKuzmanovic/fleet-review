@@ -15,3 +15,12 @@ export const ESCAPE_HTML_JS = `
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+/**
+ * JSON.stringify variant safe for embedding inside a <script> block.
+ * Escapes `<` and `>` so a string containing `</script>` cannot terminate
+ * the script tag and enable HTML/script injection in the webview.
+ */
+export function safeJsonForHtml(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+}

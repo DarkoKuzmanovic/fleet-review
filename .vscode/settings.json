@@ -1,0 +1,11 @@
+{
+  "fleetReview.customProviders": [
+    {
+      "name": "minimax",
+      "displayName": "MiniMax",
+      "kind": "http",
+      "gateway": "nanogpt",
+      "modelId": "minimax/minimax-m2.7"
+    }
+  ]
+}
