@@ -2,6 +2,26 @@ src/**
 test/**
 node_modules/**
 .vscode/**
+.claude/**
+.serena/**
+.codex
+.codex/**
+.git/**
+.gitignore
+.vscodeignore
 tsconfig.json
 webpack.config.js
-*.map
+vitest.config.ts
+**/*.map
+**/*.d.ts
+
+# Dev docs / scratch — not shipped to users
+AGENTS.md
+CLAUDE.md
+roadmap.md
+potential-roadmap.md
+review-plan.md
+todo.md
+
+# Standalone bash CLI is independent of the extension — exclude from VSIX
+shell/**
