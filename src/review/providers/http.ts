@@ -107,7 +107,7 @@ export async function runHttp(
           }, (usage) => {
             promptTokens = usage.prompt_tokens ?? 0;
             completionTokens = usage.completion_tokens ?? 0;
-          });
+          }, log);
         }
       }
       const remaining = decoder.decode() + buffer;
@@ -121,7 +121,7 @@ export async function runHttp(
         }, (usage) => {
           promptTokens = usage.prompt_tokens ?? 0;
           completionTokens = usage.completion_tokens ?? 0;
-        });
+        }, log);
       }
     } else {
       const data = await response.json() as {
@@ -155,7 +155,7 @@ export async function runHttp(
     clearTimeout(timer);
     const message = err instanceof Error ? err.message : String(err);
     const isUserAbort = signal?.aborted === true;
-    const isAbort = isUserAbort || (err instanceof Error && err.name === 'AbortError') || message.includes('abort');
+    const isAbort = isUserAbort || (err instanceof Error && err.name === 'AbortError');
     if (isAbort) {
       log(`${provider.name}: request aborted`);
       throw new Error(isUserAbort ? 'Review cancelled' : `${provider.name} timed out after ${effectiveTimeout / 1000}s`);
@@ -171,6 +171,7 @@ function processSseLine(
   line: string,
   onDelta: (text: string) => void,
   onUsage: (usage: { prompt_tokens?: number; completion_tokens?: number }) => void,
+  log: (msg: string) => void = () => { /* noop */ },
 ): void {
   const trimmed = line.trim();
   if (!trimmed || !trimmed.startsWith('data: ')) return;
@@ -186,6 +187,8 @@ function processSseLine(
     if (delta) onDelta(delta);
     if (chunk.usage) onUsage(chunk.usage);
   } catch {
-    // skip malformed SSE chunks
+    if (payload.length > 0 && payload !== '[DONE]') {
+      log(`Malformed SSE chunk (len=${payload.length}): ${payload.substring(0, 80)}`);
+    }
   }
 }

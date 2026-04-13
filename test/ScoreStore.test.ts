@@ -20,6 +20,7 @@ vi.mock('fs', async (importOriginal) => {
     promises: {
       ...actual.promises,
       writeFile: vi.fn(async () => {}),
+      rename: vi.fn(async () => {}),
     },
   };
 });

@@ -233,28 +233,28 @@ FULL_PROMPT=$(cat "$PROMPT_FILE_TMP")
 
 run_claude() {
   echo "  [claude] Starting..."
-  echo "$FULL_PROMPT" | claude -p --output-format text \
+  printf '%s\n' "$FULL_PROMPT" | claude -p --output-format text \
     > "$TMPDIR_BASE/claude.md" 2>/dev/null
   echo "  [claude] Done."
 }
 
 run_codex() {
   echo "  [codex] Starting..."
-  echo "$FULL_PROMPT" | codex exec --dangerously-bypass-approvals-and-sandbox - \
+  printf '%s\n' "$FULL_PROMPT" | codex exec --dangerously-bypass-approvals-and-sandbox - \
     > "$TMPDIR_BASE/codex.md" 2>/dev/null
   echo "  [codex] Done."
 }
 
 run_qwen() {
   echo "  [qwen] Starting..."
-  echo "$FULL_PROMPT" | qwen -p "Audit this PR" --output-format text \
+  printf '%s\n' "$FULL_PROMPT" | qwen -p "Audit this PR" --output-format text \
     > "$TMPDIR_BASE/qwen.md" 2>/dev/null
   echo "  [qwen] Done."
 }
 
 run_copilot() {
   echo "  [copilot] Starting..."
-  echo "$FULL_PROMPT" | copilot -p "Audit this PR" \
+  printf '%s\n' "$FULL_PROMPT" | copilot -p "Audit this PR" \
     > "$TMPDIR_BASE/copilot.md" 2>/dev/null
   echo "  [copilot] Done."
 }

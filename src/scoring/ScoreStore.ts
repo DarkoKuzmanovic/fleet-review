@@ -8,6 +8,8 @@ import {
 } from '../types';
 import { Config } from '../config';
 
+const SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
+
 export class ScoreStore {
   private reviewsCache: ReviewRecord[] | null = null;
   private scoresCache: ScoreEntry[] | null = null;
@@ -43,8 +45,22 @@ export class ScoreStore {
   }
 
   private async serializedWrite(fn: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(fn, fn);
+    const run = async (): Promise<void> => {
+      try {
+        await fn();
+      } catch (err) {
+        this.writeQueue = Promise.resolve();
+        throw err;
+      }
+    };
+    this.writeQueue = this.writeQueue.then(run, run);
     return this.writeQueue;
+  }
+
+  private async atomicWrite(filePath: string, data: string): Promise<void> {
+    const tmp = filePath + '.tmp';
+    await fs.promises.writeFile(tmp, data, { mode: 0o600 });
+    await fs.promises.rename(tmp, filePath);
   }
 
   // --- Reviews ---
@@ -59,7 +75,7 @@ export class ScoreStore {
       } else {
         reviews.push(review);
       }
-      await fs.promises.writeFile(this.reviewsPath, JSON.stringify(reviews, null, 2));
+      await this.atomicWrite(this.reviewsPath, JSON.stringify(reviews, null, 2));
       this.reviewsCache = reviews;
     });
   }
@@ -70,8 +86,9 @@ export class ScoreStore {
     }
     try {
       const raw = fs.readFileSync(this.reviewsPath, 'utf-8');
-      this.reviewsCache = JSON.parse(raw);
-      return this.reviewsCache!;
+      const parsed = JSON.parse(raw);
+      this.reviewsCache = Array.isArray(parsed) ? parsed : [];
+      return this.reviewsCache;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         this.reviewsCache = [];
@@ -101,7 +118,7 @@ export class ScoreStore {
       this.ensureDir();
       const scores = this.loadScores();
       scores.push(entry);
-      await fs.promises.writeFile(this.scoresPath, JSON.stringify(scores, null, 2));
+      await this.atomicWrite(this.scoresPath, JSON.stringify(scores, null, 2));
       this.scoresCache = scores;
     });
   }
@@ -111,7 +128,7 @@ export class ScoreStore {
       this.ensureDir();
       const scores = this.loadScores();
       scores.push(...entries);
-      await fs.promises.writeFile(this.scoresPath, JSON.stringify(scores, null, 2));
+      await this.atomicWrite(this.scoresPath, JSON.stringify(scores, null, 2));
       this.scoresCache = scores;
     });
   }
@@ -122,8 +139,9 @@ export class ScoreStore {
     }
     try {
       const raw = fs.readFileSync(this.scoresPath, 'utf-8');
-      this.scoresCache = JSON.parse(raw);
-      return this.scoresCache!;
+      const parsed = JSON.parse(raw);
+      this.scoresCache = Array.isArray(parsed) ? parsed : [];
+      return this.scoresCache;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         this.scoresCache = [];
@@ -192,7 +210,7 @@ export class ScoreStore {
             .map(([model, r]) => [model, { output: r.output }])
         ),
       };
-      await fs.promises.writeFile(this.lastReviewPath, JSON.stringify(data, null, 2));
+      await this.atomicWrite(this.lastReviewPath, JSON.stringify(data, null, 2));
     });
   }
 
@@ -205,28 +223,42 @@ export class ScoreStore {
 
       // Canonical format: { reviewId, scores: [...] }
       if (data.reviewId && Array.isArray(data.scores)) {
-        return data.scores.map(
-          (s: { model: string; score: number; feedback: string }) => ({
+        return data.scores
+          .filter(
+            (s: { model: unknown; score: unknown; feedback?: unknown }) =>
+              typeof s.model === 'string' &&
+              SAFE_NAME_RE.test(s.model) &&
+              typeof s.score === 'number' &&
+              Number.isFinite(s.score)
+          )
+          .map((s: { model: string; score: number; feedback?: unknown }) => ({
             reviewId: data.reviewId,
             model: s.model,
             score: Math.max(1, Math.min(10, Math.round(s.score))),
-            feedback: s.feedback ?? '',
+            feedback: typeof s.feedback === 'string' ? s.feedback : '',
             gradedBy: 'claude' as const,
             timestamp: new Date().toISOString(),
-          })
-        );
+          }));
       }
 
       // Fallback: flat ScoreEntry array (reviewId on each item)
       if (Array.isArray(data) && data.length > 0 && data[0].reviewId && data[0].model) {
-        return data.map((s: ScoreEntry) => ({
-          reviewId: s.reviewId,
-          model: s.model,
-          score: Math.max(1, Math.min(10, Math.round(s.score))),
-          feedback: s.feedback ?? '',
-          gradedBy: 'claude' as const,
-          timestamp: new Date().toISOString(),
-        }));
+        return data
+          .filter(
+            (s: ScoreEntry) =>
+              typeof s.model === 'string' &&
+              SAFE_NAME_RE.test(s.model) &&
+              typeof s.score === 'number' &&
+              Number.isFinite(s.score)
+          )
+          .map((s: ScoreEntry) => ({
+            reviewId: s.reviewId,
+            model: s.model,
+            score: Math.max(1, Math.min(10, Math.round(s.score))),
+            feedback: typeof s.feedback === 'string' ? s.feedback : '',
+            gradedBy: 'claude' as const,
+            timestamp: new Date().toISOString(),
+          }));
       }
 
       return null;

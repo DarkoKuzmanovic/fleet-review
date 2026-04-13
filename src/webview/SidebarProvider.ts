@@ -295,7 +295,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this.post({ type: "modelHealth", health });
   }
 
-  private async retryModelCore(model: ModelName): Promise<void> {
+  private async retryModelCore(model: ModelName, sharedController?: AbortController): Promise<void> {
     if (!this.lastReview) {
       throw new Error("No review to retry");
     }
@@ -310,6 +310,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           this.pendingTimeouts.set(m, resolve);
         }),
       (m, text) => this.post({ type: "reviewChunk", model: m, text }),
+      sharedController,
     );
 
     this.lastReview = updated;
@@ -337,13 +338,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     if (failedModels.length === 0) return;
 
+    const availableModels = failedModels.filter((m) => this.registry.has(m));
+    if (availableModels.length === 0) {
+      vscode.window.showWarningMessage("Fleet Review: No available models to retry");
+      return;
+    }
+
+    const sharedController = new AbortController();
+
     try {
-      const results = await Promise.allSettled(failedModels.map((model) => this.retryModelCore(model)));
+      const results = await Promise.allSettled(
+        availableModels.map((model) => this.retryModelCore(model, sharedController)),
+      );
       const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-      if (rejected.length && rejected.length === results.length) {
+      const fulfilled = results.filter((r): r is PromiseFulfilledResult<void> => r.status === "fulfilled");
+
+      if (rejected.length && fulfilled.length === 0) {
         const first = rejected[0].reason;
         this.post({ type: "reviewError", error: first instanceof Error ? first.message : String(first) });
         return;
+      }
+      if (rejected.length > 0 && fulfilled.length > 0) {
+        vscode.window.showWarningMessage(
+          `Fleet Review: ${rejected.length} of ${results.length} retries failed`,
+        );
       }
       if (this.lastReview) {
         this.post({ type: "reviewComplete", review: this.lastReview });
@@ -370,10 +388,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const providersJson = safeJsonForHtml(providerList);
     const modelsJson = safeJsonForHtml(providerList.map((p) => p.name));
     const defaultsJson = safeJsonForHtml(Config.defaultModels);
-    const timeoutSec = Config.timeoutMs / 1000;
+    const timeoutSec = safeJsonForHtml(Number(Config.timeoutMs / 1000));
     const modelTimeoutsJson = safeJsonForHtml(modelTimeouts);
     const apiModelsJson = safeJsonForHtml(providerList.filter((p) => p.kind === "http").map((p) => p.name));
-    const diffSizeThreshold = Config.diffSizeWarningThreshold;
+    const diffSizeThreshold = safeJsonForHtml(Number(Config.diffSizeWarningThreshold));
     let stats;
     try {
       stats = this.store.getModelStats("all");

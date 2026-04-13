@@ -15,7 +15,7 @@ export function buildBuiltInProviders(defaultTimeoutMs: number): ModelProvider[]
       name: "codex",
       displayName: "Codex",
       command: "codex",
-      args: ["exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.3-codex", "--effort", "high", "-"],
+      args: ["-q", "--model", "gpt-5.3-codex", "-"],
       defaultTimeoutMs,
     },
     {
@@ -39,7 +39,7 @@ export function buildBuiltInProviders(defaultTimeoutMs: number): ModelProvider[]
       name: "copilot",
       displayName: "Copilot",
       command: "copilot",
-      args: ["-p", "", "-s", "--model", "gpt-5.3-codex", "--effort", "high", "--allow-all-tools"],
+      args: ["-p", "", "-s", "--model", "gpt-5.3-codex"],
       defaultTimeoutMs,
     },
     {

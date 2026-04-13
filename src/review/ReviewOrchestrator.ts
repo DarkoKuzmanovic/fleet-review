@@ -147,10 +147,21 @@ export class ReviewOrchestrator {
 
     // Collect results
     const results: Record<string, ModelResult> = {};
-    for (const entry of settled) {
+    const rejectedModels: string[] = [];
+    settled.forEach((entry, i) => {
       if (entry.status === 'fulfilled') {
         results[entry.value.model] = entry.value;
+      } else {
+        const name = models[i] ?? 'unknown';
+        rejectedModels.push(name);
+        const reason = entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
+        this.output?.appendLine(`Fleet Review: ${name} failed to dispatch: ${reason}`);
       }
+    });
+    if (rejectedModels.length > 0) {
+      vscode.window.showWarningMessage(
+        `Fleet Review: ${rejectedModels.length} model(s) failed to dispatch: ${rejectedModels.join(', ')}`
+      );
     }
 
     this.abortController = null;
@@ -267,13 +278,14 @@ export class ReviewOrchestrator {
     onProgress: (model: string, status: ModelStatus) => void,
     onBytes?: (model: string, bytes: number) => void,
     onTimeout?: (model: string) => Promise<TimeoutDecision>,
-    onText?: (model: string, text: string) => void
+    onText?: (model: string, text: string) => void,
+    sharedController?: AbortController
   ): Promise<ReviewRecord> {
     if (!this.lastPrompt) {
       throw new Error('No previous review prompt available for retry');
     }
 
-    const localController = new AbortController();
+    const localController = sharedController ?? new AbortController();
     this.abortController = localController;
     const { signal } = localController;
 
@@ -307,6 +319,16 @@ export class ReviewOrchestrator {
           const comment = `## Audit by \`${model}\`\n\n${result.stdout}\n\n---\n_Automated audit via Fleet Review_`;
           await this.github.postComment(this.lastRepo, this.lastPrNumber, comment);
           postedToGitHub = true;
+
+          try {
+            const prInfo = await this.github.getPRInfo(this.lastRepo, this.lastPrNumber);
+            const inlineComments = ReviewOrchestrator.parseInlineFindings(result.stdout, model, prInfo.files);
+            if (inlineComments.length > 0) {
+              await this.github.postInlineComments(this.lastRepo, this.lastPrNumber, inlineComments);
+            }
+          } catch (inlineErr) {
+            this.logCommentFailure(model, inlineErr);
+          }
         } catch (e) {
           this.logCommentFailure(model, e);
           vscode.window.showWarningMessage(`Fleet Review: failed to post GitHub comment for ${model}`);
