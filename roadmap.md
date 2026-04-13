@@ -6,33 +6,32 @@
 
 ### Code Review Findings (2026-04-12)
 
-Findings from a manual audit of the 0.4.6 codebase.
+Manual audit of the 0.4.6 codebase produced 10 findings. Status tracking below.
 
-| #   | Finding                                              | Location                          | Notes                                                                                                                                                                                                                                                                                          |
-| --- | ---------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `getPRInfo` uses `raw: any`                          | `GitHubClient.ts:93`              | The `getPRInfo` parse result is typed as `any`; other parse sites in the same file use explicit inline types                                                                                                                                                                                   |
-| 2   | `writeFileSync` still used for comment temp files    | `GitHubClient.ts:113,148`         | `postComment` and `postInlineComments` use synchronous `writeFileSync` / `unlinkSync` on the extension host thread                                                                                                                                                                             |
-| 3   | `getAuditComments` regex matches any word            | `GitHubClient.ts:169`             | `/## Audit by \`(\w+)\``—`\w+` will match provider names with hyphens or dots if they ever appear; better to match against known registry names                                                                                                                                                |
-| 4   | `RetryAllFailed` runs models sequentially            | `SidebarProvider.ts`              | `retryAllFailed()` loops `for (const model of failedModels)` with `await` — should be parallel like the initial run                                                                                                                                                                            |
-| 5   | `GradeImporter` silently ignores watcher ENOENT      | `GradeImporter.ts:29`             | Outer `try {}` swallows all watcher errors, not just the expected ENOENT; a permissions error goes unnoticed                                                                                                                                                                                   |
-| 6   | `score` range never validated on manual grade submit | `SidebarProvider.ts:submitGrades` | The webview sends scores from a slider (min/max enforced by the DOM), but the host never checks `1 ≤ score ≤ 10` — a crafted message can store an out-of-range score                                                                                                                           |
-| 7   | `handleTimeout` not `async`-safe in cli.ts           | `cli.ts:spawnWithStdin`           | `handleTimeout` is called from a `setTimeout` callback; if `onTimeout` resolves after the process has already settled, a second `settle()` call is made — harmless today because `settle` guards, but the extend path calls `startTimer()` unconditionally after `settled = true` could be set |
-| 8   | Version passed as raw string from `packageJSON`      | `extension.ts:33`                 | `context.extension.packageJSON.version` is typed as `any`; the cast `as string` is safe today but an explicit check or use of the `ExtensionContext.extension.packageJSON` type would be safer                                                                                                 |
-| 9   | No truncation of model output before saving          | `ReviewOrchestrator.ts`           | A runaway model can produce megabytes; `reviews.json` will grow unbounded — a simple max-length cap on `result.stdout` before storing would prevent disk bloat                                                                                                                                 |
-| 10  | `modelGlyphHtml` in sidebar.js is a linear scan      | `sidebar.js`                      | Called once per model per tick of `renderResults` — not a hot path, but building it as a lookup object at init time is cleaner                                                                                                                                                                 |
+| #   | Finding                                              | Location                          | Status |
+| --- | ---------------------------------------------------- | --------------------------------- | ------ |
+| 1   | `getPRInfo` uses `raw: any`                          | `GitHubClient.ts:93`              | Open   |
+| 2   | `writeFileSync` still used for comment temp files    | `GitHubClient.ts:113,148`         | Open   |
+| 3   | `getAuditComments` regex matches any word            | `GitHubClient.ts:169`             | Open   |
+| 4   | `RetryAllFailed` runs models sequentially            | `SidebarProvider.ts`              | Fixed  |
+| 5   | `GradeImporter` silently ignores watcher ENOENT      | `GradeImporter.ts:29`             | Open   |
+| 6   | `score` range never validated on manual grade submit | `SidebarProvider.ts:submitGrades` | Fixed  |
+| 7   | `handleTimeout` not `async`-safe in cli.ts           | `cli.ts:spawnWithStdin`           | Open   |
+| 8   | Version passed as raw string from `packageJSON`      | `extension.ts:33`                 | Fixed  |
+| 9   | No truncation of model output before saving          | `ReviewOrchestrator.ts`           | Open   |
+| 10  | `modelGlyphHtml` in sidebar.js is a linear scan      | `sidebar.js`                      | Open   |
 
-### Bug Fixes
+**Notes per finding:**
 
-- [ ] Replace `raw: any` in `getPRInfo` with a typed inline interface (`GitHubClient.ts`, finding #1)
-- [ ] Replace synchronous `writeFileSync`/`unlinkSync` with `fs.promises` equivalents in `postComment` and `postInlineComments` (`GitHubClient.ts`, finding #2)
-- [ ] Clamp model output to a configurable max length (e.g. 200 KB) before persisting in `ReviewOrchestrator` (`finding #9`)
-- [x] Validate `1 ≤ score ≤ 10` in `submitGrades` on the extension host side (`SidebarProvider.ts`, finding #6) — _landed in 0.4.6_
-- [x] Run `retryAllFailed` models in parallel with `Promise.allSettled` instead of sequentially (`SidebarProvider.ts`, finding #4) — _landed in 0.4.6_
-- [x] Validate `packageJSON.version` type before passing to `SidebarProvider` (`extension.ts`, finding #8) — _landed in 0.4.6_
+1. The `getPRInfo` parse result is typed as `any`; other parse sites in the same file use explicit inline types
+2. `postComment` and `postInlineComments` use synchronous `writeFileSync` / `unlinkSync` on the extension host thread
+3. `/## Audit by \`(\w+)\``—`\w+` will match provider names with hyphens or dots if they ever appear; better to match against known registry names
+4. Outer `try {}` swallows all watcher errors, not just the expected ENOENT; a permissions error goes unnoticed
+5. `handleTimeout` is called from a `setTimeout` callback; if `onTimeout` resolves after the process has already settled, a second `settle()` call is made — harmless today because `settle` guards, but the extend path calls `startTimer()` unconditionally after `settled = true` could be set
 
-### Fleet Review-on-0.4.6 Fix Set (2026-04-12)
+### Self-Review Fixes (PR #10, 2026-04-12)
 
-Fixes landed directly in PR #10 after grading the self-review. Consensus findings from 8 models (claude, codex, gemini, qwen, copilot, glm, minimax, trinity):
+Fixes landed after grading the self-review. Consensus findings from 8 models (claude, codex, gemini, qwen, copilot, glm, minimax, trinity):
 
 - [x] Escape `this.version` in the sidebar footer and harden the `packageJSON.version` cast (`extension.ts`, `SidebarProvider.ts`)
 - [x] Validate score range and model identity in `submitGrades` on the extension host
@@ -43,27 +42,36 @@ Fixes landed directly in PR #10 after grading the self-review. Consensus finding
 - [x] Guard `tokenUsage` aggregation against missing `prompt` / `completion` fields
 - [x] Clear `chunkBuffers` on `reviewError` as well as `reviewComplete`
 
+### Remaining Bug Fixes
+
+- [ ] **#1:** Replace `raw: any` in `getPRInfo` with a typed inline interface (`GitHubClient.ts`)
+- [ ] **#2:** Replace synchronous `writeFileSync`/`unlinkSync` with `fs.promises` equivalents in `postComment` and `postInlineComments` (`GitHubClient.ts`)
+- [ ] **#3:** Tighten `getAuditComments` regex to match only known provider names (`GitHubClient.ts`)
+- [ ] **#5:** Surface non-ENOENT errors in `GradeImporter` watcher instead of swallowing all errors (`GradeImporter.ts`)
+- [ ] **#7:** Make `handleTimeout` async-safe — guard against double `settle()` calls and unconditional `startTimer()` after settlement (`cli.ts`)
+- [ ] **#9:** Clamp model output to a configurable max length (e.g. 200 KB) before persisting (`ReviewOrchestrator.ts`)
+- [ ] **#10:** Replace linear-scan `modelGlyphHtml` with a lookup object built at init time (`sidebar.js`)
+
 ### Small Feature Improvements
 
-1. **Merge report button visible only when all models have results** — `btn-merge` is always shown; it should appear only after every selected model has finished (success or fail), so users can't trigger a half-baked merge.
+**UI / UX**
 
-2. **Last-review badge on the History tab** — show a "latest" chip next to the most recent history entry so it's immediately clear which was the last run without reading timestamps.
+- [ ] **Merge button visibility** — `btn-merge` should appear only after every selected model has finished (success or fail), so users can't trigger a half-baked merge
+- [ ] **Provider display names in progress rows** — use `displayName` (e.g. `DeepSeek V3.2`) instead of raw `name` (e.g. `deepseek`) from `__FR_CONFIG.providers`
+- [ ] **Token usage for HTTP models** — surface `prompt + completion` token counts in the results card next to the KB size (data already in `ModelResult.tokenUsage`)
+- [ ] **Review age in history list** — replace absolute timestamps with relative age strings ("2 h ago", "yesterday"); keep full ISO date in `title` attribute for hover
+- [ ] **Last-review badge on History tab** — show a "latest" chip next to the most recent history entry for quick identification
+- [ ] **Auto-open Grading tab after review completes** — optional (`fleetReview.autoOpenGrade: boolean`) auto-switch to Grade tab removes a manual step
 
-3. **Provider display names in progress rows** — the progress view shows the provider `name` (e.g. `deepseek`) rather than `displayName` (e.g. `DeepSeek V3.2`); use `displayName` from `__FR_CONFIG.providers`.
+**Commands / Settings**
 
-4. **Token usage shown for HTTP models** — `ModelResult.tokenUsage` is already stored; surface `prompt + completion` token counts in the results card next to the KB size.
+- [ ] **`Fleet Review: Copy Last Review ID`** — one-liner command that writes the latest `review.id` to the clipboard for bug reports or `pending-scores.json`
+- [ ] **`fleetReview.maxOutputKB` setting** — expose the output-size cap as a user setting (default 200) so power users can raise it for verbose models
+- [ ] **HTTP provider health check: verify key format** — basic length check (e.g. > 10 chars) to catch obvious typos/truncations before showing a green dot
 
-5. **Abort in-progress merge** — `runMerge` dispatches to a single model but there is no cancel path; a thinking model could peg it for 10 minutes. Wire up an `AbortController` the same way `runReview` does.
+**Reliability**
 
-6. **Review age in history list** — the history drawer shows timestamps; replace with relative age strings ("2 h ago", "yesterday") for faster scanning. Absolute ISO date can live in `title` attribute for hover.
-
-7. **`Fleet Review: Copy Last Review ID` command** — a one-liner command that writes the latest `review.id` to the clipboard. Saves hunting through `reviews.json` when filing bug reports or manually writing `pending-scores.json`.
-
-8. **Health check for HTTP providers: verify key format before showing green dot** — currently any non-empty string stored in SecretStorage makes the dot green. A basic length check (e.g. > 10 chars) would catch obvious typos/truncations.
-
-9. **`fleetReview.maxOutputKB` setting** — expose the output-size cap (finding #9 above) as a user setting with a default of 200, so power users running large diffs with verbose models can raise it.
-
-10. **Auto-open Grading tab after review completes** — after all models finish, the sidebar stays on the Review tab. Offering an optional auto-switch to Grade (`fleetReview.autoOpenGrade: boolean`) removes a manual step for users who always grade right after reviewing.
+- [ ] **Abort in-progress merge** — wire up an `AbortController` to `runMerge` the same way `runReview` does, so a thinking model can't peg for 10 minutes
 
 ---
 
