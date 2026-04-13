@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 
-import { ProjectType } from './types';
+import { ProjectType, SAFE_NAME_RE } from './types';
 import type { HttpGateway, ModelProvider } from './review/providers/types';
 
 export class Config {
@@ -55,7 +55,7 @@ export class Config {
       if (!entry || typeof entry !== 'object') continue;
       const e = entry as Record<string, unknown>;
       if (typeof e.name !== 'string' || typeof e.baseUrl !== 'string') continue;
-      if (!Config.SAFE_NAME_RE.test(e.name)) continue;
+      if (!SAFE_NAME_RE.test(e.name)) continue;
       const gateway: HttpGateway = { name: e.name, baseUrl: e.baseUrl };
       if (e.headers && typeof e.headers === 'object' && !Array.isArray(e.headers)) {
         const headers: Record<string, string> = {};
@@ -69,13 +69,11 @@ export class Config {
     return out;
   }
 
-  private static readonly SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
-
   private static parseProviderEntry(entry: unknown): ModelProvider | null {
     if (!entry || typeof entry !== 'object') return null;
     const e = entry as Record<string, unknown>;
     if (typeof e.name !== 'string' || typeof e.displayName !== 'string') return null;
-    if (!Config.SAFE_NAME_RE.test(e.name)) return null;
+    if (!SAFE_NAME_RE.test(e.name)) return null;
     const timeoutSec = typeof e.timeoutSeconds === 'number' && e.timeoutSeconds > 0
       ? e.timeoutSeconds
       : Config.defaultTimeoutSeconds;

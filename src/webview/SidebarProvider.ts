@@ -367,6 +367,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.post({ type: "reviewComplete", review: this.lastReview });
       }
     } finally {
+      this.orchestrator.finalizeSharedRetry(sharedController);
       this.clearPendingTimeouts();
     }
   }

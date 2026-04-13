@@ -4,11 +4,10 @@ import * as path from 'path';
 import {
   ModelStats,
   ReviewRecord,
+  SAFE_NAME_RE,
   ScoreEntry,
 } from '../types';
 import { Config } from '../config';
-
-const SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 
 export class ScoreStore {
   private reviewsCache: ReviewRecord[] | null = null;
@@ -58,9 +57,14 @@ export class ScoreStore {
   }
 
   private async atomicWrite(filePath: string, data: string): Promise<void> {
-    const tmp = filePath + '.tmp';
-    await fs.promises.writeFile(tmp, data, { mode: 0o600 });
-    await fs.promises.rename(tmp, filePath);
+    const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await fs.promises.writeFile(tmp, data, { mode: 0o600 });
+      await fs.promises.rename(tmp, filePath);
+    } catch (err) {
+      try { await fs.promises.unlink(tmp); } catch { /* ignore */ }
+      throw err;
+    }
   }
 
   // --- Reviews ---

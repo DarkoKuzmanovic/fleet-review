@@ -174,7 +174,7 @@ export class GitHubClient {
     const comments: Array<{ model: string; body: string }> = [];
     for (const c of raw.comments ?? []) {
       const body = typeof c.body === 'string' ? c.body : '';
-      const match = body.match(/^## Audit by `(\w+)`/);
+      const match = body.match(/^## Audit by `([a-zA-Z0-9][a-zA-Z0-9._-]{0,63})`/);
       if (match) {
         comments.push({ model: match[1], body });
       }

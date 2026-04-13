@@ -101,6 +101,10 @@ export class ProviderRegistry {
       host === '[::1]' ||
       host === '[::]' ||
       host.startsWith('[::ffff:') ||
+      // Block any :: prefixed IPv6 that isn't the single :: or ::1 — this
+      // catches deprecated IPv4-compatible forms like [::192.168.1.1] which
+      // Node normalises to [::c0a8:101] and would otherwise slip through.
+      (host.startsWith('[::') && !host.startsWith('[::ffff:')) ||
       /^127\.\d+\.\d+\.\d+$/.test(host) ||
       /^10\.\d+\.\d+\.\d+$/.test(host) ||
       /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host) ||

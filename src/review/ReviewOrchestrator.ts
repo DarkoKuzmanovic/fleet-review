@@ -50,6 +50,17 @@ export class ReviewOrchestrator {
     this.abortController = null;
   }
 
+  /**
+   * Clears the shared abort controller after a parallel retry batch settles.
+   * Individual `retrySingleModel` calls no longer null the controller when a
+   * shared one was passed, so the caller must release it once all retries finish.
+   */
+  finalizeSharedRetry(controller: AbortController): void {
+    if (this.abortController === controller) {
+      this.abortController = null;
+    }
+  }
+
   async runReview(
     repo: string,
     pr: PRDetail,
@@ -353,7 +364,7 @@ export class ReviewOrchestrator {
       };
     }
 
-    if (this.abortController === localController) {
+    if (!sharedController && this.abortController === localController) {
       this.abortController = null;
     }
     try {

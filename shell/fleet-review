@@ -240,7 +240,7 @@ run_claude() {
 
 run_codex() {
   echo "  [codex] Starting..."
-  printf '%s\n' "$FULL_PROMPT" | codex exec --dangerously-bypass-approvals-and-sandbox - \
+  printf '%s\n' "$FULL_PROMPT" | codex -q --model gpt-5.3-codex - \
     > "$TMPDIR_BASE/codex.md" 2>/dev/null
   echo "  [codex] Done."
 }

@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Removed the leftover `--dangerously-bypass-approvals-and-sandbox` flag from `shell/fleet-review`'s `run_codex`, which still shipped the zero-click RCE path the built-in provider had already fixed in this release (second-pass review; flagged by claude, gemini, qwen, copilot, glm, minimax)
+- `PromptBuilder` now XML-escapes PR title, branch, author, and body before interpolating them into the `<pr-metadata>` block, so a malicious PR can no longer inject a closing `</pr-metadata>` tag to break out of the untrusted-content boundary (second-pass review; flagged by copilot, glm)
+- `ProviderRegistry.isSafeGatewayUrl` now also blocks IPv4-compatible IPv6 addresses like `[::192.168.1.1]` (which Node normalises to `[::c0a8:101]`); the earlier guard only covered the `::ffff:` mapped form (second-pass review; flagged by claude, glm, gemini)
 - Declared `capabilities.untrustedWorkspaces: limited` and scoped `fleetReview.customProviders`, `fleetReview.customGateways`, and `fleetReview.dataDir` to `"machine"` so a cloned repo's `.vscode/settings.json` can no longer silently register attacker-controlled commands or exfiltrate API keys (critical RCE; 14-model audit)
 - Removed `--dangerously-bypass-approvals-and-sandbox` from the built-in `codex` provider and `--allow-all-tools` from `copilot`, eliminating a zero-click RCE path where a prompt-injected PR could drive a sandbox-bypassed CLI
 - `ProviderRegistry` now rejects custom gateways that shadow built-in names (`nanogpt`, `openrouter`) instead of logging a warning and overriding, preventing stored API keys from being redirected to attacker URLs
@@ -26,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `GitHubClient.getAuditComments` now matches model names with the full `SAFE_NAME_RE` character class instead of `\w+`, so audit comments for models with dots or dashes (e.g. `gpt-4-turbo`, `claude-3.5-sonnet`) are correctly detected (second-pass review; flagged by gemini)
+- `ScoreStore.atomicWrite` now uses a unique tmp-file name and cleans it up on rename failure, so a crashed write no longer leaves a `0600` file containing sensitive review data behind (second-pass review; flagged by claude, gemini, qwen)
+- `ReviewOrchestrator.retrySingleModel` no longer nulls the shared `abortController` when called with one, fixing a subtle lifecycle bug where the first-finishing parallel retry disabled the Cancel button for its still-in-flight siblings. `SidebarProvider.retryAllFailed` releases the shared controller via a new `finalizeSharedRetry` helper once the batch settles. (second-pass review; flagged by claude, minimax, qwen)
+- Consolidated the `SAFE_NAME_RE` regex into a single exported constant in `src/types.ts`; `ScoreStore`, `GradingPanel`, and `Config` now all import from the same source of truth (second-pass review; flagged by claude, gemini, qwen, trinity)
 - `retryAllFailed` now creates a single shared `AbortController` for all parallel retries, so the Cancel button actually cancels every in-flight retry instead of only the last one (H2 from audit). Partial failures now surface as a warning toast, and the path early-exits with a warning if none of the failed models are still available in the registry.
 - Retries now post inline comments in addition to the top-level audit summary, matching the behaviour of the initial review run
 - `ReviewOrchestrator.runReview` logs and surfaces rejected model dispatches (previously dropped silently) so users see which models never ran

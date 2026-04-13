@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { ExtensionMessage, ReviewRecord, ScoreEntry, WebviewMessage } from '../types';
+import { ExtensionMessage, ReviewRecord, SAFE_NAME_RE, ScoreEntry, WebviewMessage } from '../types';
 import { ScoreStore } from '../scoring/ScoreStore';
 import { ESCAPE_HTML_JS, escapeHtml, safeJsonForHtml } from './webviewUtils';
 
@@ -57,7 +57,6 @@ export class GradingPanel {
           vscode.window.showErrorMessage('Fleet Review: invalid grade payload');
           return;
         }
-        const SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
         const entries: ScoreEntry[] = [];
         for (const s of msg.scores) {
           if (!s || typeof s.model !== 'string' || !SAFE_NAME_RE.test(s.model)) {

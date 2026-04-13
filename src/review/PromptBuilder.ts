@@ -52,11 +52,13 @@ export class PromptBuilder {
     const maxRun = (diff.match(/`{3,}/g) ?? []).reduce((max, m) => Math.max(max, m.length), 3);
     const fence = '`'.repeat(maxRun + 1);
 
+    const escapeTag = (s: string): string =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const prMetadataBlock = `<pr-metadata>
-<title>${pr.title}</title>
-<branch>${pr.headRefName}</branch>
-<author>${pr.author}</author>
-${pr.body ? `<description>\n${pr.body}\n</description>\n` : ""}</pr-metadata>`;
+<title>${escapeTag(pr.title)}</title>
+<branch>${escapeTag(pr.headRefName)}</branch>
+<author>${escapeTag(pr.author)}</author>
+${pr.body ? `<description>\n${escapeTag(pr.body)}\n</description>\n` : ""}</pr-metadata>`;
 
     return `${contextLine}${auditInstructions}
 
