@@ -111,11 +111,11 @@ export class GitHubClient {
   async postComment(repo: string, pr: number, body: string): Promise<void> {
     const tmpFile = path.join(os.tmpdir(), `fleet-review-comment-${randomUUID()}.md`);
     try {
-      fs.writeFileSync(tmpFile, body, "utf-8");
+      await fs.promises.writeFile(tmpFile, body, { mode: 0o600 });
       await this.gh(["pr", "comment", String(pr), "--repo", repo, "--body-file", tmpFile]);
     } finally {
       try {
-        fs.unlinkSync(tmpFile);
+        await fs.promises.unlink(tmpFile);
       } catch {
         // ignore cleanup errors
       }
@@ -143,7 +143,7 @@ export class GitHubClient {
 
       const tmpFile = path.join(os.tmpdir(), `fleet-review-review-${randomUUID()}.json`);
       try {
-        fs.writeFileSync(tmpFile, reviewBody, 'utf-8');
+        await fs.promises.writeFile(tmpFile, reviewBody, { mode: 0o600 });
         await this.gh([
           'api',
           '--method', 'POST',
@@ -154,7 +154,7 @@ export class GitHubClient {
       } catch (err) {
         this.log(`Skipped inline comment on ${c.path}:${c.line}: ${err instanceof Error ? err.message : err}`);
       } finally {
-        try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+        try { await fs.promises.unlink(tmpFile); } catch { /* ignore */ }
       }
     }
 
@@ -173,9 +173,10 @@ export class GitHubClient {
     }
     const comments: Array<{ model: string; body: string }> = [];
     for (const c of raw.comments ?? []) {
-      const match = (c.body as string).match(/^## Audit by `(\w+)`/);
+      const body = typeof c.body === 'string' ? c.body : '';
+      const match = body.match(/^## Audit by `([a-zA-Z0-9][a-zA-Z0-9._-]{0,63})`/);
       if (match) {
-        comments.push({ model: match[1], body: c.body });
+        comments.push({ model: match[1], body });
       }
     }
     return comments;
@@ -194,10 +195,10 @@ export class GitHubClient {
           cwd,
           env: {
             ...process.env,
-            GH_PAGER: "cat",
+            GH_PAGER: "",
             GH_PROMPT_DISABLED: "1",
             NO_COLOR: "1",
-            PAGER: "cat",
+            PAGER: "",
           },
           maxBuffer: 10 * 1024 * 1024,
           timeout: 30_000,

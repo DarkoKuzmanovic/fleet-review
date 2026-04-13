@@ -2,7 +2,7 @@
   "name": "fleet-review",
   "displayName": "Fleet Review",
   "description": "Multi-AI code review for GitHub PRs with model scoring",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "icon": "media/icon.png",
   "publisher": "darko-kuzmanovic",
   "license": "MIT",
@@ -19,6 +19,12 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Custom providers and gateways require trust because they can execute arbitrary commands and redirect API keys."
+    }
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -83,6 +89,7 @@
         },
         "fleetReview.dataDir": {
           "type": "string",
+          "scope": "machine",
           "default": "~/.config/fleet-review",
           "description": "Directory for review data and scores"
         },
@@ -93,6 +100,7 @@
         },
         "fleetReview.customProviders": {
           "type": "array",
+          "scope": "machine",
           "default": [],
           "description": "User-registered model providers. Each entry is either a CLI-based or HTTP-based provider. API keys for HTTP providers are stored via the 'Fleet Review: Set Gateway API Key' command (not here).",
           "items": {
@@ -147,6 +155,7 @@
         },
         "fleetReview.customGateways": {
           "type": "array",
+          "scope": "machine",
           "default": [],
           "description": "User-defined HTTP gateways. Each gateway holds a baseUrl and optional headers; the API key is stored via the 'Fleet Review: Set Gateway API Key' command.",
           "items": {

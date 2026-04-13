@@ -10,6 +10,7 @@ export class GradeImporter implements vscode.Disposable {
   private readonly onImportEmitter = new vscode.EventEmitter<ScoreEntry[]>();
   public readonly onImport = this.onImportEmitter.event;
   private importing = false;
+  private pendingTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private store: ScoreStore) {}
 
@@ -44,10 +45,15 @@ export class GradeImporter implements vscode.Disposable {
     if (this.importing) return;
     this.importing = true;
     // Small delay to let the file finish writing
-    setTimeout(async () => {
+    this.pendingTimeout = setTimeout(async () => {
       try {
-        this.store.invalidateCache();
-        const scores = this.store.readPendingScores();
+        let scores: ScoreEntry[] | null = null;
+        try {
+          this.store.invalidateCache();
+          scores = this.store.readPendingScores();
+        } catch {
+          return;
+        }
         if (!scores || scores.length === 0) {
           return;
         }
@@ -77,11 +83,16 @@ export class GradeImporter implements vscode.Disposable {
         vscode.window.showErrorMessage(`Fleet Review: import failed — ${err instanceof Error ? err.message : err}`);
       } finally {
         this.importing = false;
+        this.pendingTimeout = null;
       }
     }, 500);
   }
 
   dispose(): void {
+    if (this.pendingTimeout !== null) {
+      clearTimeout(this.pendingTimeout);
+      this.pendingTimeout = null;
+    }
     this.stopWatching();
     this.onImportEmitter.dispose();
   }

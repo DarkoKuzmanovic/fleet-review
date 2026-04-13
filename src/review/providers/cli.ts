@@ -1,8 +1,5 @@
 import { spawn } from 'child_process';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
 
 import type { CliResult } from '../../types';
 import type { CliProvider, RunContext } from './types';
@@ -12,12 +9,7 @@ export async function runCli(
   prompt: string,
   ctx: RunContext = {},
 ): Promise<CliResult> {
-  const promptFile = await writeTempPrompt(provider.name, prompt);
-  try {
-    return await spawnWithStdin(provider, promptFile, ctx);
-  } finally {
-    await deleteTempPrompt(promptFile);
-  }
+  return spawnWithStdin(provider, prompt, ctx);
 }
 
 function killProcessGroup(proc: ReturnType<typeof spawn>): void {
@@ -35,7 +27,7 @@ function killProcessGroup(proc: ReturnType<typeof spawn>): void {
 
 function spawnWithStdin(
   provider: CliProvider,
-  promptFile: string,
+  prompt: string,
   ctx: RunContext,
 ): Promise<CliResult> {
   const { command } = provider;
@@ -51,7 +43,7 @@ function spawnWithStdin(
     }
 
     log(`Spawning: ${command} ${args.join(' ')}`);
-    log(`Prompt file size: ${fs.statSync(promptFile).size}B`);
+    log(`Prompt size: ${prompt.length} chars`);
     const proc = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
@@ -135,22 +127,11 @@ function spawnWithStdin(
       settle(() => resolve({ stdout, stderr, exitCode: code ?? 1 }));
     });
 
-    const promptContent = fs.readFileSync(promptFile, 'utf-8');
-    proc.stdin.write(promptContent);
+    proc.stdin.on('error', (err) => {
+      log(`${command} stdin error: ${err.message}`);
+    });
+    proc.stdin.write(prompt);
     proc.stdin.end();
   });
 }
 
-async function writeTempPrompt(name: string, prompt: string): Promise<string> {
-  const filePath = path.join(os.tmpdir(), `fleet-review-${name}-${randomUUID()}.md`);
-  await fs.promises.writeFile(filePath, prompt, 'utf-8');
-  return filePath;
-}
-
-async function deleteTempPrompt(filePath: string): Promise<void> {
-  try {
-    await fs.promises.unlink(filePath);
-  } catch {
-    // ignore cleanup errors
-  }
-}

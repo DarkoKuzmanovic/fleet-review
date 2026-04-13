@@ -37,7 +37,7 @@ const mockSpawn = vi.mocked(spawn);
 function createMockProcess(stdout = '', exitCode = 0, errorEvent?: Error) {
   const proc = Object.assign(new EventEmitter(), {
     pid: 12345,
-    stdin: { write: vi.fn(), end: vi.fn() },
+    stdin: { write: vi.fn(), end: vi.fn(), on: vi.fn() },
     stdout: Object.assign(new EventEmitter(), {}),
     stderr: Object.assign(new EventEmitter(), {}),
     kill: vi.fn(),
@@ -95,7 +95,7 @@ describe('CliDispatcher.dispatch - command routing', () => {
     await dispatcher.dispatch('codex', 'test prompt');
     expect(mockSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec', '--dangerously-bypass-approvals-and-sandbox', '--model', 'gpt-5.3-codex', '--effort', 'high', '-'],
+      ['-q', '--model', 'gpt-5.3-codex', '-'],
       expect.any(Object)
     );
   });
@@ -125,7 +125,7 @@ describe('CliDispatcher.dispatch - command routing', () => {
     await dispatcher.dispatch('copilot', 'test prompt');
     expect(mockSpawn).toHaveBeenCalledWith(
       'copilot',
-      ['-p', '', '-s', '--model', 'gpt-5.3-codex', '--effort', 'high', '--allow-all-tools'],
+      ['-p', '', '-s', '--model', 'gpt-5.3-codex'],
       expect.any(Object)
     );
   });
@@ -186,7 +186,7 @@ describe('CliDispatcher.dispatch - process results', () => {
   it('collects stderr output', async () => {
     const proc = Object.assign(new EventEmitter(), {
       pid: 99,
-      stdin: { write: vi.fn(), end: vi.fn() },
+      stdin: { write: vi.fn(), end: vi.fn(), on: vi.fn() },
       stdout: Object.assign(new EventEmitter(), {}),
       stderr: Object.assign(new EventEmitter(), {}),
       kill: vi.fn(),

@@ -21,7 +21,7 @@ Each AI independently reviews the diff and posts findings as a PR comment. Comme
 | ----- | ------- | ----- |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Used for merge synthesis |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Defaults to Auto model (Gemini 3) |
-| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | Needs `--dangerously-bypass-approvals-and-sandbox` |
+| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | |
 | [Qwen CLI](https://github.com/QwenLM/qwen-code) | `npm i -g @qwen-code/qwen-code` | |
 | [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli) | `npm i -g @githubnext/ghcs` | |
 

@@ -129,6 +129,12 @@ export class LeaderboardPanel {
   const vscode = acquireVsCodeApi();
   let currentTf = 'all';
 
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
   document.querySelectorAll('.filters button').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
@@ -158,16 +164,20 @@ export class LeaderboardPanel {
       '</tr></thead><tbody>';
 
     for (const s of stats) {
-      const avg = s.avgScore.toFixed(1);
-      const cls = s.avgScore >= 7 ? 'high' : s.avgScore >= 5 ? 'mid' : 'low';
+      const avgNum = Number.isFinite(s.avgScore) ? s.avgScore : 0;
+      const avg = avgNum.toFixed(1);
+      const cls = avgNum >= 7 ? 'high' : avgNum >= 5 ? 'mid' : 'low';
       const sparkline = buildSparkline(s.recentScores, 80, 24);
+      const best = Number.isFinite(s.best) ? s.best : '—';
+      const worst = Number.isFinite(s.worst) ? s.worst : '—';
+      const total = Number.isFinite(s.totalReviews) ? s.totalReviews : 0;
 
       html += '<tr>' +
-        '<td class="model-name">' + s.model + '</td>' +
+        '<td class="model-name">' + escapeHtml(s.model) + '</td>' +
         '<td><span class="score ' + cls + '">' + avg + '</span></td>' +
-        '<td>' + s.totalReviews + '</td>' +
-        '<td>' + s.best + '</td>' +
-        '<td>' + s.worst + '</td>' +
+        '<td>' + total + '</td>' +
+        '<td>' + best + '</td>' +
+        '<td>' + worst + '</td>' +
         '<td class="sparkline">' + sparkline + '</td>' +
         '</tr>';
     }
@@ -188,12 +198,14 @@ export class LeaderboardPanel {
     const h = height - padding * 2;
 
     const points = scores.map((val, i) => {
+      const v = Number.isFinite(val) ? val : min;
       const x = padding + (i / (scores.length - 1)) * w;
-      const y = padding + h - ((val - min) / (max - min)) * h;
+      const y = padding + h - ((v - min) / (max - min)) * h;
       return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
 
-    const last = scores[scores.length - 1];
+    const rawLast = scores[scores.length - 1];
+    const last = Number.isFinite(rawLast) ? rawLast : min;
     const color = last >= 7 ? 'var(--vscode-testing-iconPassed)' : last >= 5 ? 'var(--vscode-editorWarning-foreground)' : 'var(--vscode-testing-iconFailed)';
 
     return '<svg width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +

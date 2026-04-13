@@ -72,10 +72,10 @@ Built-in command patterns:
 | Provider | Kind | Command / gateway + model                                                                     |
 | -------- | ---- | --------------------------------------------------------------------------------------------- |
 | claude   | cli  | `claude -p --output-format text`                                                              |
-| codex    | cli  | `codex exec --dangerously-bypass-approvals-and-sandbox --model gpt-5.3-codex --effort high -` |
+| codex    | cli  | `codex -q --model gpt-5.3-codex -`                                                            |
 | gemini   | cli  | `gemini -e "" -p "Review the provided code" --output-format text`                             |
 | qwen     | cli  | `qwen -p "" --output-format text`                                                             |
-| copilot  | cli  | `copilot -p "" -s --model gpt-5.3-codex --effort high --allow-all-tools`                      |
+| copilot  | cli  | `copilot -p "" -s --model gpt-5.3-codex`                                                      |
 | glm      | http | gateway `nanogpt`, modelId `zai-org/glm-5:thinking`                                           |
 
 Adding a new model is a settings-only change — no code edits. Example: to add `minimax/minimax-m2.7` via Nano-GPT, append an entry to `fleetReview.customProviders` with `kind: "http"`, `gateway: "nanogpt"`, and the desired `modelId`, then set the gateway key once via the command palette.
@@ -171,7 +171,7 @@ This project maintains a [CHANGELOG.md](CHANGELOG.md) following [Keep a Changelo
 ## Known Issues / Design Decisions
 
 - Claude CLI has ~7KB stdin limit — CliDispatcher writes prompt to temp file to work around this
-- Codex needs `--dangerously-bypass-approvals-and-sandbox` for headless use
+- Codex is invoked in non-interactive mode with `codex -q --model gpt-5.3-codex -` (the `--dangerously-bypass-approvals-and-sandbox` flag was removed in v0.4.7 to close a zero-click RCE path; same for `copilot`'s `--allow-all-tools`)
 - Extension uses `retainContextWhenHidden` for webview state persistence
 - The shell/ bash script is independent — the extension does NOT wrap or depend on it
 - GitHub operations use `gh` CLI (must be authenticated via `gh auth login`)

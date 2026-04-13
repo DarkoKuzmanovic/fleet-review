@@ -36,7 +36,8 @@ export class ProviderRegistry {
         continue;
       }
       if (builtInGatewayNames.has(gw.name)) {
-        this.log(`Custom gateway '${gw.name}' overrides a built-in gateway — stored API keys will be sent to '${gw.baseUrl}'. Verify this URL is trusted.`);
+        this.log(`Skipping custom gateway '${gw.name}': cannot override a built-in gateway. Stored API keys would be sent to '${gw.baseUrl}'.`);
+        continue;
       }
       this.gateways.set(gw.name, gw);
     }
@@ -98,8 +99,20 @@ export class ProviderRegistry {
       host === 'localhost' ||
       host === '0.0.0.0' ||
       host === '[::1]' ||
+      host === '[::]' ||
+      host.startsWith('[::ffff:') ||
+      // Block any :: prefixed IPv6 that isn't the single :: or ::1 — this
+      // catches deprecated IPv4-compatible forms like [::192.168.1.1] which
+      // Node normalises to [::c0a8:101] and would otherwise slip through.
+      (host.startsWith('[::') && !host.startsWith('[::ffff:')) ||
       /^127\.\d+\.\d+\.\d+$/.test(host) ||
-      host.startsWith('169.254.')
+      /^10\.\d+\.\d+\.\d+$/.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host) ||
+      /^192\.168\.\d+\.\d+$/.test(host) ||
+      host.startsWith('169.254.') ||
+      host.startsWith('[fc') ||
+      host.startsWith('[fd') ||
+      host.startsWith('[fe80:')
     ) {
       return false;
     }

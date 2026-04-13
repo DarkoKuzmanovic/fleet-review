@@ -1,6 +1,13 @@
 /** Opaque string identifying a model provider (e.g. 'claude', 'glm', or a user-registered name). */
 export type ModelName = string;
 
+/**
+ * Allowed characters for model/gateway/provider names. Must start alphanumeric,
+ * may contain `._-`, max 64 chars. Used for filesystem safety, prompt-injection
+ * guards, and webview rendering — keep in sync across all validation sites.
+ */
+export const SAFE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
+
 export type ModelStatus = 'pending' | 'running' | 'done' | 'failed' | 'timeout' | 'timeout-pending';
 
 export type TimeoutDecision = 'extend' | 'kill';

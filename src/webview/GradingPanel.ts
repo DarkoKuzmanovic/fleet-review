@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { ExtensionMessage, ReviewRecord, ScoreEntry, WebviewMessage } from '../types';
+import { ExtensionMessage, ReviewRecord, SAFE_NAME_RE, ScoreEntry, WebviewMessage } from '../types';
 import { ScoreStore } from '../scoring/ScoreStore';
 import { ESCAPE_HTML_JS, escapeHtml, safeJsonForHtml } from './webviewUtils';
 
@@ -53,14 +53,29 @@ export class GradingPanel {
   private async handleMessage(msg: WebviewMessage): Promise<void> {
     if (msg.type === 'submitGrades') {
       try {
-        const entries: ScoreEntry[] = msg.scores.map((s) => ({
-          reviewId: this.review.id,
-          model: s.model,
-          score: s.score,
-          feedback: s.feedback,
-          gradedBy: 'user' as const,
-          timestamp: new Date().toISOString(),
-        }));
+        if (!Array.isArray(msg.scores)) {
+          vscode.window.showErrorMessage('Fleet Review: invalid grade payload');
+          return;
+        }
+        const entries: ScoreEntry[] = [];
+        for (const s of msg.scores) {
+          if (!s || typeof s.model !== 'string' || !SAFE_NAME_RE.test(s.model)) {
+            vscode.window.showErrorMessage('Fleet Review: invalid model name in grade');
+            return;
+          }
+          if (typeof s.score !== 'number' || !Number.isFinite(s.score) || s.score < 1 || s.score > 10) {
+            vscode.window.showErrorMessage(`Fleet Review: score for ${s.model} must be 1–10`);
+            return;
+          }
+          entries.push({
+            reviewId: this.review.id,
+            model: s.model,
+            score: Math.round(s.score),
+            feedback: typeof s.feedback === 'string' ? s.feedback : '',
+            gradedBy: 'user' as const,
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         await this.store.saveScores(entries);
 
@@ -180,8 +195,8 @@ export class GradingPanel {
   function init() {
     const container = document.getElementById('cards');
     container.innerHTML = models.map(m =>
-      '<div class="grade-card" data-model="' + m.model + '">' +
-      '  <h3>' + m.model + ' <span class="duration">' + (m.durationMs / 1000).toFixed(1) + 's</span></h3>' +
+      '<div class="grade-card" data-model="' + escapeHtml(m.model) + '">' +
+      '  <h3>' + escapeHtml(m.model) + ' <span class="duration">' + (m.durationMs / 1000).toFixed(1) + 's</span></h3>' +
       '  <details>' +
       '    <summary>View audit output</summary>' +
       '    <pre>' + escapeHtml(m.output) + '</pre>' +
